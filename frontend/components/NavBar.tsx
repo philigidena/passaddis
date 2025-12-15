@@ -164,8 +164,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     logoImage: {
-        width: 160,
-        height: 44,
+        width: 180,
+        height: 50,
     },
     desktopNav: {
         flexDirection: 'row',
