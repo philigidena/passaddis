@@ -18,6 +18,45 @@ interface ShopItem {
     badge?: string;
 }
 
+interface PickupLocation {
+    id: string;
+    name: string;
+    area: string;
+    address: string;
+    hours: string;
+}
+
+const PICKUP_LOCATIONS: PickupLocation[] = [
+    {
+        id: '1',
+        name: 'Shoa Supermarket',
+        area: 'Bole',
+        address: 'Bole Road, near Edna Mall',
+        hours: '8 AM - 10 PM',
+    },
+    {
+        id: '2',
+        name: 'Safeway Supermarket',
+        area: 'Sarbet',
+        address: 'Sarbet, Lideta',
+        hours: '7 AM - 9 PM',
+    },
+    {
+        id: '3',
+        name: 'Fantu Supermarket',
+        area: 'Kazanchis',
+        address: 'Kazanchis, near Intercontinental',
+        hours: '8 AM - 9 PM',
+    },
+    {
+        id: '4',
+        name: 'Queens Supermarket',
+        area: 'CMC',
+        address: 'CMC Road, Michael',
+        hours: '8 AM - 10 PM',
+    },
+];
+
 const SHOP_ITEMS: ShopItem[] = [
     {
         id: '1',
@@ -25,88 +64,130 @@ const SHOP_ITEMS: ShopItem[] = [
         price: 180,
         priceDisplay: '180 ETB',
         image: 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=400&h=400&fit=crop&q=80',
-        category: 'Drinks',
+        category: 'Water',
         description: 'Pack of 6 Ambo mineral water bottles',
-        inStock: true,
-    },
-    {
-        id: '2',
-        name: 'Event Snack Box',
-        price: 250,
-        priceDisplay: '250 ETB',
-        image: 'https://images.unsplash.com/photo-1621939514649-280e2ee25f60?w=400&h=400&fit=crop&q=80',
-        category: 'Snacks',
-        description: 'Assorted snacks perfect for events',
         inStock: true,
         badge: 'Popular',
     },
     {
+        id: '2',
+        name: 'Highland Water Pack (12)',
+        price: 150,
+        priceDisplay: '150 ETB',
+        image: 'https://images.unsplash.com/photo-1560023907-5f339617ea30?w=400&h=400&fit=crop&q=80',
+        category: 'Water',
+        description: 'Pack of 12 Highland purified water',
+        inStock: true,
+    },
+    {
         id: '3',
-        name: 'PassAddis Cap',
-        price: 350,
-        priceDisplay: '350 ETB',
-        image: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&h=400&fit=crop&q=80',
-        category: 'Merch',
-        description: 'Official PassAddis branded cap',
+        name: 'Coca-Cola Pack (6)',
+        price: 210,
+        priceDisplay: '210 ETB',
+        image: 'https://images.unsplash.com/photo-1629203851122-3726ecdf080e?w=400&h=400&fit=crop&q=80',
+        category: 'Drinks',
+        description: '6 cans of ice-cold Coca-Cola',
         inStock: true,
     },
     {
         id: '4',
-        name: 'Ethiopian Coffee Set',
-        price: 420,
-        priceDisplay: '420 ETB',
-        image: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&h=400&fit=crop&q=80',
+        name: 'Mirinda & Sprite Mix',
+        price: 200,
+        priceDisplay: '200 ETB',
+        image: 'https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?w=400&h=400&fit=crop&q=80',
         category: 'Drinks',
-        description: 'Premium Ethiopian coffee set',
+        description: '3 Mirinda + 3 Sprite cans',
+        inStock: true,
+    },
+    {
+        id: '5',
+        name: 'Red Bull (4 Pack)',
+        price: 400,
+        priceDisplay: '400 ETB',
+        image: 'https://images.unsplash.com/photo-1613217786163-5896419a2574?w=400&h=400&fit=crop&q=80',
+        category: 'Drinks',
+        description: 'Energy boost for all-night events',
+        inStock: true,
+        badge: 'Event Pick',
+    },
+    {
+        id: '6',
+        name: 'Chips Party Pack',
+        price: 280,
+        priceDisplay: '280 ETB',
+        image: 'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&h=400&fit=crop&q=80',
+        category: 'Snacks',
+        description: 'Assorted chips - Lays, Pringles mix',
         inStock: true,
         badge: 'Best Seller',
     },
     {
-        id: '5',
-        name: 'Energy Drink Pack',
-        price: 300,
-        priceDisplay: '300 ETB',
-        image: 'https://images.unsplash.com/photo-1622543925917-763c34d1a86e?w=400&h=400&fit=crop&q=80',
-        category: 'Drinks',
-        description: 'Pack of 4 energy drinks',
-        inStock: false,
-    },
-    {
-        id: '6',
-        name: 'PassAddis T-Shirt',
-        price: 500,
-        priceDisplay: '500 ETB',
-        image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=400&fit=crop&q=80',
-        category: 'Merch',
-        description: 'Comfortable cotton tee with logo',
-        inStock: true,
-        badge: 'New',
-    },
-    {
         id: '7',
-        name: 'Mixed Nuts Pack',
-        price: 200,
-        priceDisplay: '200 ETB',
+        name: 'Mixed Nuts & Dried Fruits',
+        price: 250,
+        priceDisplay: '250 ETB',
         image: 'https://images.unsplash.com/photo-1536591375657-fc29be29f3be?w=400&h=400&fit=crop&q=80',
         category: 'Snacks',
-        description: 'Healthy mixed nuts for events',
+        description: 'Premium healthy snack mix',
         inStock: true,
     },
     {
         id: '8',
-        name: 'PassAddis Tote Bag',
-        price: 280,
-        priceDisplay: '280 ETB',
-        image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=400&h=400&fit=crop&q=80',
-        category: 'Merch',
-        description: 'Eco-friendly canvas tote bag',
+        name: 'Chocolate Assortment',
+        price: 350,
+        priceDisplay: '350 ETB',
+        image: 'https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=400&h=400&fit=crop&q=80',
+        category: 'Snacks',
+        description: 'Snickers, Twix, KitKat mix',
         inStock: true,
+    },
+    {
+        id: '9',
+        name: 'Biscuit Variety Box',
+        price: 180,
+        priceDisplay: '180 ETB',
+        image: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=400&h=400&fit=crop&q=80',
+        category: 'Snacks',
+        description: 'Assorted biscuits and cookies',
+        inStock: true,
+    },
+    {
+        id: '10',
+        name: 'Popcorn Mega Pack',
+        price: 150,
+        priceDisplay: '150 ETB',
+        image: 'https://images.unsplash.com/photo-1578849278619-e73505e9610f?w=400&h=400&fit=crop&q=80',
+        category: 'Snacks',
+        description: 'Ready-to-eat popcorn for movies & events',
+        inStock: true,
+    },
+    {
+        id: '11',
+        name: 'PassAddis Event T-Shirt',
+        price: 500,
+        priceDisplay: '500 ETB',
+        image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=400&fit=crop&q=80',
+        category: 'Merch',
+        description: 'Official PassAddis branded tee',
+        inStock: true,
+        badge: 'New',
+    },
+    {
+        id: '12',
+        name: 'Glow Sticks Pack (10)',
+        price: 120,
+        priceDisplay: '120 ETB',
+        image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop&q=80',
+        category: 'Merch',
+        description: 'Light up your concert experience',
+        inStock: false,
     },
 ];
 
 const CATEGORIES = [
-    { id: 'All', label: 'All Items', icon: 'grid-outline' },
-    { id: 'Drinks', label: 'Drinks', icon: 'cafe-outline' },
+    { id: 'All', label: 'All', icon: 'grid-outline' },
+    { id: 'Water', label: 'Water', icon: 'water-outline' },
+    { id: 'Drinks', label: 'Soft Drinks', icon: 'cafe-outline' },
     { id: 'Snacks', label: 'Snacks', icon: 'fast-food-outline' },
     { id: 'Merch', label: 'Merch', icon: 'shirt-outline' },
 ];
@@ -122,6 +203,8 @@ export default function ShopScreen() {
 
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [cartCount, setCartCount] = useState(0);
+    const [selectedLocation, setSelectedLocation] = useState(PICKUP_LOCATIONS[0]);
+    const [showLocationPicker, setShowLocationPicker] = useState(false);
 
     const filteredItems = SHOP_ITEMS.filter(item =>
         selectedCategory === 'All' || item.category === selectedCategory
@@ -173,17 +256,61 @@ export default function ShopScreen() {
 
                 {/* Main Content Container */}
                 <View style={[styles.mainContent, { maxWidth: maxContentWidth }]}>
-                    {/* Pickup Notice */}
-                    <View style={[styles.pickupNotice, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}>
-                        <View style={[styles.pickupIconWrapper, { backgroundColor: theme.primary }]}>
-                            <Ionicons name="location" size={20} color="#FFFFFF" />
+                    {/* Pickup Location Selector */}
+                    <TouchableOpacity
+                        style={[styles.locationSelector, { backgroundColor: theme.card, borderColor: theme.border }]}
+                        onPress={() => setShowLocationPicker(!showLocationPicker)}
+                    >
+                        <View style={[styles.locationIconWrapper, { backgroundColor: theme.primary }]}>
+                            <Ionicons name="storefront" size={20} color="#FFFFFF" />
                         </View>
-                        <View style={styles.pickupTextWrapper}>
-                            <Text style={[styles.pickupTitle, { color: theme.text }]}>Pickup Only</Text>
-                            <Text style={[styles.pickupDesc, { color: theme.textSecondary }]}>
-                                Show your QR code at venue counter to collect items
+                        <View style={styles.locationInfo}>
+                            <Text style={[styles.locationLabel, { color: theme.textSecondary }]}>Pickup from</Text>
+                            <Text style={[styles.locationName, { color: theme.text }]}>{selectedLocation.name}</Text>
+                            <Text style={[styles.locationArea, { color: theme.textSecondary }]}>
+                                {selectedLocation.area} • {selectedLocation.hours}
                             </Text>
                         </View>
+                        <Ionicons name={showLocationPicker ? "chevron-up" : "chevron-down"} size={20} color={theme.icon} />
+                    </TouchableOpacity>
+
+                    {/* Location Picker Dropdown */}
+                    {showLocationPicker && (
+                        <View style={[styles.locationDropdown, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                            {PICKUP_LOCATIONS.map((location) => (
+                                <TouchableOpacity
+                                    key={location.id}
+                                    style={[
+                                        styles.locationOption,
+                                        selectedLocation.id === location.id && { backgroundColor: theme.primaryLight }
+                                    ]}
+                                    onPress={() => {
+                                        setSelectedLocation(location);
+                                        setShowLocationPicker(false);
+                                    }}
+                                >
+                                    <View style={styles.locationOptionInfo}>
+                                        <Text style={[styles.locationOptionName, { color: theme.text }]}>
+                                            {location.name}
+                                        </Text>
+                                        <Text style={[styles.locationOptionArea, { color: theme.textSecondary }]}>
+                                            {location.area} • {location.address}
+                                        </Text>
+                                    </View>
+                                    {selectedLocation.id === location.id && (
+                                        <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+
+                    {/* Pickup Info Banner */}
+                    <View style={[styles.pickupNotice, { backgroundColor: theme.backgroundSecondary }]}>
+                        <Ionicons name="information-circle" size={18} color={theme.primary} />
+                        <Text style={[styles.pickupInfoText, { color: theme.textSecondary }]}>
+                            Show your order QR code at the supermarket counter to collect your items
+                        </Text>
                     </View>
 
                     {/* Categories */}
@@ -439,7 +566,7 @@ const styles = StyleSheet.create({
         alignSelf: 'center',
         paddingHorizontal: 20,
     },
-    pickupNotice: {
+    locationSelector: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 14,
@@ -448,22 +575,66 @@ const styles = StyleSheet.create({
         borderRadius: 14,
         borderWidth: 1,
     },
-    pickupIconWrapper: {
+    locationIconWrapper: {
         width: 44,
         height: 44,
         borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    pickupTextWrapper: {
+    locationInfo: {
         flex: 1,
     },
-    pickupTitle: {
-        fontSize: 15,
+    locationLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 2,
+    },
+    locationName: {
+        fontSize: 16,
         fontWeight: '700',
         marginBottom: 2,
     },
-    pickupDesc: {
+    locationArea: {
+        fontSize: 12,
+    },
+    locationDropdown: {
+        marginTop: 8,
+        borderRadius: 14,
+        borderWidth: 1,
+        overflow: 'hidden',
+    },
+    locationOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+    },
+    locationOptionInfo: {
+        flex: 1,
+    },
+    locationOptionName: {
+        fontSize: 15,
+        fontWeight: '600',
+        marginBottom: 2,
+    },
+    locationOptionArea: {
+        fontSize: 12,
+    },
+    pickupNotice: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginTop: 16,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderRadius: 10,
+    },
+    pickupInfoText: {
+        flex: 1,
         fontSize: 13,
         lineHeight: 18,
     },

@@ -4,8 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 
-// Ethiopia-themed hero image - Addis Ababa cityscape/crowd
-const HERO_IMAGE_URL = 'https://images.unsplash.com/photo-1523805009345-7448845a9e53?w=1600&h=900&fit=crop&q=80';
+// Hero image - Singer performing on stage with crowd
+const HERO_IMAGE_URL = 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=1600&h=900&fit=crop&q=80';
 
 export const Hero: React.FC = () => {
     const { width, height } = useWindowDimensions();
