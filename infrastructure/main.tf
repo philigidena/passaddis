@@ -91,3 +91,74 @@ module "ecs" {
     S3_BUCKET    = module.s3.bucket_name
   }
 }
+
+# App Runner Module (Optional - for backend hosting)
+module "apprunner" {
+  source = "./modules/apprunner"
+  count  = var.enable_apprunner ? 1 : 0
+
+  name_prefix        = local.name_prefix
+  environment        = var.environment
+  aws_region         = var.aws_region
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+
+  # RDS access
+  rds_security_group_id = module.rds.security_group_id
+
+  # GitHub configuration
+  github_repository_url = var.github_repository_url
+  github_branch         = var.github_branch
+  github_connection_arn = var.github_connection_arn
+
+  # Application configuration
+  database_url   = module.rds.database_url
+  jwt_secret     = var.jwt_secret
+  frontend_url   = var.frontend_url
+  s3_bucket_name = module.s3.bucket_name
+  s3_bucket_arn  = module.s3.bucket_arn
+
+  # Extra environment variables (Chapa, SMS, etc.)
+  extra_environment_variables = {
+    CHAPA_SECRET_KEY     = var.chapa_secret_key
+    CHAPA_WEBHOOK_SECRET = var.chapa_webhook_secret
+    AFRO_SMS_API_KEY     = var.afro_sms_api_key
+    AFRO_SMS_IDENTIFIER  = var.afro_sms_identifier
+    AFRO_SMS_SENDER      = var.afro_sms_sender
+  }
+
+  # Instance configuration (cost optimized)
+  cpu           = "256"   # 0.25 vCPU
+  memory        = "512"   # 0.5 GB
+  min_instances = 1
+  max_instances = 3
+}
+
+# Elastic Beanstalk Module (Recommended - FREE TIER eligible)
+module "elasticbeanstalk" {
+  source = "./modules/elasticbeanstalk"
+  count  = var.enable_elasticbeanstalk ? 1 : 0
+
+  name_prefix       = local.name_prefix
+  environment       = var.environment
+  aws_region        = var.aws_region
+  vpc_id            = module.vpc.vpc_id
+  public_subnet_ids = module.vpc.public_subnet_ids
+
+  # RDS access
+  rds_security_group_id = module.rds.security_group_id
+
+  # Application configuration
+  database_url   = module.rds.database_url
+  jwt_secret     = var.jwt_secret
+  frontend_url   = var.frontend_url
+  s3_bucket_name = module.s3.bucket_name
+  s3_bucket_arn  = module.s3.bucket_arn
+
+  # Payment & SMS configuration
+  chapa_secret_key     = var.chapa_secret_key
+  chapa_webhook_secret = var.chapa_webhook_secret
+  afro_sms_api_key     = var.afro_sms_api_key
+  afro_sms_identifier  = var.afro_sms_identifier
+  afro_sms_sender      = var.afro_sms_sender
+}

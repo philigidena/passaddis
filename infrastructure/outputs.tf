@@ -35,3 +35,18 @@ output "api_url" {
   description = "API Load Balancer URL"
   value       = var.enable_ecs ? module.ecs[0].alb_dns_name : null
 }
+
+output "apprunner_url" {
+  description = "App Runner service URL"
+  value       = var.enable_apprunner ? module.apprunner[0].service_url : null
+}
+
+output "elasticbeanstalk_url" {
+  description = "Elastic Beanstalk environment URL"
+  value       = var.enable_elasticbeanstalk ? module.elasticbeanstalk[0].endpoint_url : null
+}
+
+output "elasticbeanstalk_environment_name" {
+  description = "Elastic Beanstalk environment name"
+  value       = var.enable_elasticbeanstalk ? module.elasticbeanstalk[0].environment_name : null
+}
