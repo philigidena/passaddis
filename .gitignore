@@ -35,3 +35,14 @@ coverage/
 
 # Misc
 *.tsbuildinfo
+nul
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!environments/**/terraform.tfvars
+
+# Claude Code
+.claude/

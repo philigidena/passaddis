@@ -6,7 +6,20 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  getHello(): object {
+    return {
+      name: 'PassAddis API',
+      version: '1.0.0',
+      status: 'running',
+      docs: '/api',
+    };
+  }
+
+  @Get('health')
+  healthCheck(): object {
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    };
   }
 }
