@@ -2,11 +2,20 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AfroSmsProvider } from './providers/afro-sms.provider';
-import { SendOtpDto, VerifyOtpDto, RegisterDto, AuthResponseDto } from './dto/auth.dto';
+import {
+  SendOtpDto,
+  VerifyOtpDto,
+  RegisterDto,
+  AuthResponseDto,
+  EmailRegisterDto,
+  EmailLoginDto,
+} from './dto/auth.dto';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
@@ -170,5 +179,119 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  // ============== EMAIL/PASSWORD AUTHENTICATION ==============
+
+  // Register with email and password
+  async registerWithEmail(dto: EmailRegisterDto): Promise<AuthResponseDto> {
+    const { email, password, name, phone } = dto;
+
+    // Check if email already exists
+    const existingEmail = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingEmail) {
+      throw new ConflictException('Email already registered');
+    }
+
+    // Check if phone already exists (if provided)
+    if (phone) {
+      const existingPhone = await this.prisma.user.findUnique({
+        where: { phone },
+      });
+
+      if (existingPhone) {
+        throw new ConflictException('Phone number already registered');
+      }
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create user
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        name,
+        phone: phone || `email_${Date.now()}`, // Temporary phone for users registering with email
+        isVerified: true, // Email users are verified by default (can add email verification later)
+      },
+    });
+
+    // Generate JWT
+    const payload = { sub: user.id, phone: user.phone, email: user.email, role: user.role };
+    const accessToken = this.jwtService.sign(payload);
+
+    return {
+      accessToken,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    };
+  }
+
+  // Login with email and password
+  async loginWithEmail(dto: EmailLoginDto): Promise<AuthResponseDto> {
+    const { email, password } = dto;
+
+    // Find user by email
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // Generate JWT
+    const payload = { sub: user.id, phone: user.phone, email: user.email, role: user.role };
+    const accessToken = this.jwtService.sign(payload);
+
+    return {
+      accessToken,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    };
+  }
+
+  // Add password to existing user (for users who registered via OTP)
+  async setPassword(userId: string, password: string): Promise<{ message: string }> {
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    return { message: 'Password set successfully' };
+  }
+
+  // Check if user has password set
+  async hasPassword(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+
+    return !!user?.passwordHash;
   }
 }

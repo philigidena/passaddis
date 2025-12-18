@@ -15,7 +15,9 @@ import {
   CbeBirrCallbackDto,
   ChapaWebhookDto,
 } from './dto/payments.dto';
-import { PaymentMethod as PrismaPaymentMethod } from '@prisma/client';
+
+// Payment method type for SQLite (string instead of enum)
+type PaymentMethodString = 'CHAPA' | 'TELEBIRR' | 'CBE_BIRR' | 'BANK_TRANSFER';
 
 @Injectable()
 export class PaymentsService {
@@ -89,11 +91,11 @@ export class PaymentsService {
       create: {
         orderId: order.id,
         amount: order.total,
-        method: dto.method as PrismaPaymentMethod,
+        method: dto.method as PaymentMethodString,
         status: 'PENDING',
       },
       update: {
-        method: dto.method as PrismaPaymentMethod,
+        method: dto.method as PaymentMethodString,
         status: 'PENDING',
       },
     });
@@ -292,8 +294,8 @@ export class PaymentsService {
 
     const isSuccess = data.status === 'success';
 
-    // Map Chapa payment method to our enum
-    let paymentMethod: PrismaPaymentMethod = 'CHAPA';
+    // Map Chapa payment method to our type
+    let paymentMethod: PaymentMethodString = 'CHAPA';
     if (data.payment_method) {
       const method = data.payment_method.toLowerCase();
       if (method.includes('telebirr')) {

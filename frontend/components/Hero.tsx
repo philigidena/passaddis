@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions, useColorScheme, ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -8,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 const HERO_IMAGE_URL = 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=1600&h=900&fit=crop&q=80';
 
 export const Hero: React.FC = () => {
+    const router = useRouter();
     const { width, height } = useWindowDimensions();
     const colorScheme = useColorScheme();
     const theme = Colors[colorScheme ?? 'light'];
@@ -57,11 +59,17 @@ export const Hero: React.FC = () => {
 
                 {/* CTA Buttons */}
                 <View style={[styles.ctaRow, isMobile && styles.ctaRowMobile]}>
-                    <TouchableOpacity style={[styles.primaryCta, { backgroundColor: theme.primary }]}>
+                    <TouchableOpacity
+                        style={[styles.primaryCta, { backgroundColor: theme.primary }]}
+                        onPress={() => router.push('/events')}
+                    >
                         <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
                         <Text style={styles.primaryCtaText}>Browse Events</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.secondaryCta}>
+                    <TouchableOpacity
+                        style={styles.secondaryCta}
+                        onPress={() => router.push('/shop')}
+                    >
                         <Ionicons name="storefront-outline" size={20} color="#FFFFFF" />
                         <Text style={styles.secondaryCtaText}>Visit Shop</Text>
                     </TouchableOpacity>

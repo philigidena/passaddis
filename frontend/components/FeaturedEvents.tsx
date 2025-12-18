@@ -1,12 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, useWindowDimensions, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, useWindowDimensions, useColorScheme, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { Event, MOCK_EVENTS } from '@/data/events';
+import { useEvents } from '@/hooks/useEvents';
+import { Event as ApiEvent } from '@/services/api';
 
 interface FeaturedEventCardProps {
-    event: Event;
+    event: ApiEvent;
     onPress: () => void;
     cardWidth: number;
 }
@@ -14,6 +16,21 @@ interface FeaturedEventCardProps {
 const FeaturedEventCard: React.FC<FeaturedEventCardProps> = ({ event, onPress, cardWidth }) => {
     const colorScheme = useColorScheme();
     const theme = Colors[colorScheme ?? 'light'];
+
+    // Format the date
+    const eventDate = new Date(event.date);
+    const formattedDate = eventDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    });
+
+    // Format price range
+    const priceRange = event.minPrice === 0
+        ? 'Free'
+        : event.minPrice === event.maxPrice
+            ? `${event.minPrice} ETB`
+            : `${event.minPrice} - ${event.maxPrice} ETB`;
 
     return (
         <TouchableOpacity
@@ -36,11 +53,11 @@ const FeaturedEventCard: React.FC<FeaturedEventCardProps> = ({ event, onPress, c
                     <Text style={styles.categoryText}>{event.category}</Text>
                 </View>
 
-                {/* Trending Badge */}
-                {event.isTrending && (
+                {/* Featured Badge */}
+                {event.isFeatured && (
                     <View style={[styles.trendingBadge, { backgroundColor: theme.gold }]}>
-                        <Ionicons name="trending-up" size={12} color="#1A1A2E" />
-                        <Text style={styles.trendingText}>Trending</Text>
+                        <Ionicons name="star" size={12} color="#1A1A2E" />
+                        <Text style={styles.trendingText}>Featured</Text>
                     </View>
                 )}
 
@@ -48,14 +65,14 @@ const FeaturedEventCard: React.FC<FeaturedEventCardProps> = ({ event, onPress, c
                 <View style={styles.overlayContent}>
                     <View style={styles.dateRow}>
                         <Ionicons name="calendar-outline" size={12} color="#FFD700" />
-                        <Text style={styles.dateText}>{event.date}</Text>
+                        <Text style={styles.dateText}>{formattedDate}</Text>
                     </View>
                     <Text style={styles.title} numberOfLines={2}>
                         {event.title}
                     </Text>
                     <View style={styles.locationRow}>
                         <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.7)" />
-                        <Text style={styles.locationText}>{event.location}</Text>
+                        <Text style={styles.locationText}>{event.venue}, {event.city}</Text>
                     </View>
                 </View>
             </View>
@@ -64,9 +81,9 @@ const FeaturedEventCard: React.FC<FeaturedEventCardProps> = ({ event, onPress, c
             <View style={styles.footer}>
                 <View>
                     <Text style={[styles.priceLabel, { color: theme.textSecondary }]}>From</Text>
-                    <Text style={[styles.price, { color: theme.primary }]}>{event.priceRange}</Text>
+                    <Text style={[styles.price, { color: theme.primary }]}>{priceRange}</Text>
                 </View>
-                <TouchableOpacity style={[styles.ticketButton, { backgroundColor: theme.primary }]}>
+                <TouchableOpacity style={[styles.ticketButton, { backgroundColor: theme.primary }]} onPress={onPress}>
                     <Ionicons name="ticket-outline" size={14} color="#FFFFFF" />
                     <Text style={styles.ticketButtonText}>Tickets</Text>
                 </TouchableOpacity>
@@ -76,9 +93,13 @@ const FeaturedEventCard: React.FC<FeaturedEventCardProps> = ({ event, onPress, c
 };
 
 export const FeaturedEvents: React.FC = () => {
+    const router = useRouter();
     const { width } = useWindowDimensions();
     const colorScheme = useColorScheme();
     const theme = Colors[colorScheme ?? 'light'];
+
+    // Fetch events from API with featured filter
+    const { events, isLoading } = useEvents({ featured: true });
 
     // Calculate card width based on screen size
     const containerPadding = 24;
@@ -96,7 +117,7 @@ export const FeaturedEvents: React.FC = () => {
     }
     cardWidth = Math.max(260, Math.min(320, cardWidth));
 
-    const featuredEvents = MOCK_EVENTS.filter(e => e.isFeatured || e.isTrending).slice(0, 5);
+    const featuredEvents = events.slice(0, 6);
 
     return (
         <View style={[styles.container, { backgroundColor: theme.backgroundSecondary }]}>
@@ -109,7 +130,10 @@ export const FeaturedEvents: React.FC = () => {
                             Don't miss out
                         </Text>
                     </View>
-                    <TouchableOpacity style={[styles.seeAllButton, { backgroundColor: theme.primaryLight }]}>
+                    <TouchableOpacity
+                        style={[styles.seeAllButton, { backgroundColor: theme.primaryLight }]}
+                        onPress={() => router.push('/events')}
+                    >
                         <Text style={[styles.seeAllText, { color: theme.primary }]}>View All</Text>
                         <Ionicons name="arrow-forward" size={16} color={theme.primary} />
                     </TouchableOpacity>
@@ -117,25 +141,37 @@ export const FeaturedEvents: React.FC = () => {
             </View>
 
             {/* Cards ScrollView - Full width for scroll effect */}
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={[
-                    styles.scrollContainer,
-                    { paddingHorizontal: Math.max(24, (width - maxContentWidth) / 2 + 24) }
-                ]}
-                snapToInterval={cardWidth + cardGap}
-                decelerationRate="fast"
-            >
-                {featuredEvents.map((event) => (
-                    <FeaturedEventCard
-                        key={event.id}
-                        event={event}
-                        onPress={() => console.log('Event pressed')}
-                        cardWidth={cardWidth}
-                    />
-                ))}
-            </ScrollView>
+            {isLoading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={theme.primary} />
+                    <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading events...</Text>
+                </View>
+            ) : featuredEvents.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                    <Ionicons name="calendar-outline" size={48} color={theme.icon} />
+                    <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No upcoming events</Text>
+                </View>
+            ) : (
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={[
+                        styles.scrollContainer,
+                        { paddingHorizontal: Math.max(24, (width - maxContentWidth) / 2 + 24) }
+                    ]}
+                    snapToInterval={cardWidth + cardGap}
+                    decelerationRate="fast"
+                >
+                    {featuredEvents.map((event) => (
+                        <FeaturedEventCard
+                            key={event.id}
+                            event={event}
+                            onPress={() => router.push(`/event/${event.id}`)}
+                            cardWidth={cardWidth}
+                        />
+                    ))}
+                </ScrollView>
+            )}
 
             {/* Quick Stats */}
             <View style={[styles.contentWrapper, { maxWidth: maxContentWidth }]}>
@@ -151,7 +187,7 @@ export const FeaturedEvents: React.FC = () => {
                     <View style={[styles.quickStatDivider, { backgroundColor: theme.border }]} />
                     <View style={styles.quickStatItem}>
                         <Text style={[styles.quickStatNumber, { color: theme.primary }]}>
-                            {MOCK_EVENTS.length}+
+                            {events.length}+
                         </Text>
                         <Text style={[styles.quickStatLabel, { color: theme.textSecondary }]}>
                             Total Events
@@ -159,9 +195,9 @@ export const FeaturedEvents: React.FC = () => {
                     </View>
                     <View style={[styles.quickStatDivider, { backgroundColor: theme.border }]} />
                     <View style={styles.quickStatItem}>
-                        <Text style={[styles.quickStatNumber, { color: theme.primary }]}>5</Text>
+                        <Text style={[styles.quickStatNumber, { color: theme.primary }]}>1</Text>
                         <Text style={[styles.quickStatLabel, { color: theme.textSecondary }]}>
-                            Cities
+                            City
                         </Text>
                     </View>
                 </View>
@@ -353,5 +389,23 @@ const styles = StyleSheet.create({
     quickStatDivider: {
         width: 1,
         height: 32,
+    },
+    loadingContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+    },
+    emptyText: {
+        marginTop: 12,
+        fontSize: 14,
     },
 });

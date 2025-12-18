@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, useColorScheme, useWindowDimensions, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,16 +6,36 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { MOCK_EVENTS, Event } from '@/data/events';
+import { useEvents } from '@/hooks/useEvents';
 
 const CATEGORIES = [
     { id: 'all', label: 'All Events', icon: 'apps-outline' },
-    { id: 'Music', label: 'Music', icon: 'musical-notes-outline' },
-    { id: 'Business', label: 'Business', icon: 'briefcase-outline' },
-    { id: 'Social', label: 'Social', icon: 'people-outline' },
-    { id: 'Arts', label: 'Arts', icon: 'color-palette-outline' },
-    { id: 'Food', label: 'Food', icon: 'restaurant-outline' },
-    { id: 'Fashion', label: 'Fashion', icon: 'shirt-outline' },
+    { id: 'MUSIC', label: 'Music', icon: 'musical-notes-outline' },
+    { id: 'CONFERENCE', label: 'Business', icon: 'briefcase-outline' },
+    { id: 'FESTIVAL', label: 'Social', icon: 'people-outline' },
+    { id: 'ARTS', label: 'Arts', icon: 'color-palette-outline' },
+    { id: 'COMEDY', label: 'Comedy', icon: 'happy-outline' },
+    { id: 'SPORTS', label: 'Sports', icon: 'basketball-outline' },
 ];
+
+// Convert API event to display format
+const formatApiEvent = (apiEvent: any): Event => ({
+    id: apiEvent.id,
+    title: apiEvent.title,
+    date: new Date(apiEvent.date).toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+    }) + ' • ' + (apiEvent.startTime || '7:00 PM'),
+    location: apiEvent.venue || apiEvent.city || 'Addis Ababa',
+    imageUrl: apiEvent.imageUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=800&h=600&fit=crop&q=80',
+    priceRange: apiEvent.ticketTypes?.[0]?.price
+        ? `${apiEvent.ticketTypes[0].price} ETB`
+        : 'Free Entry',
+    category: apiEvent.category || 'OTHER',
+    isFeatured: apiEvent.isFeatured,
+    isTrending: false,
+});
 
 export default function EventsScreen() {
     const router = useRouter();
@@ -28,14 +48,33 @@ export default function EventsScreen() {
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
 
-    const filteredEvents = MOCK_EVENTS.filter(event => {
-        const matchesCategory = selectedCategory === 'all' || event.category === selectedCategory;
-        const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            event.location.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesCategory && matchesSearch;
-    });
+    // Fetch events from API
+    const { events: apiEvents, featuredEvents: apiFeatured } = useEvents();
 
-    const featuredEvent = MOCK_EVENTS.find(e => e.isFeatured);
+    // Use API events if available, otherwise fall back to mock data
+    const events = useMemo(() => {
+        if (apiEvents && apiEvents.length > 0) {
+            return apiEvents.map(formatApiEvent);
+        }
+        return MOCK_EVENTS;
+    }, [apiEvents]);
+
+    const filteredEvents = useMemo(() => {
+        return events.filter(event => {
+            const matchesCategory = selectedCategory === 'all' ||
+                event.category.toUpperCase() === selectedCategory.toUpperCase();
+            const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                event.location.toLowerCase().includes(searchQuery.toLowerCase());
+            return matchesCategory && matchesSearch;
+        });
+    }, [events, selectedCategory, searchQuery]);
+
+    const featuredEvent = useMemo(() => {
+        if (apiFeatured && apiFeatured.length > 0) {
+            return formatApiEvent(apiFeatured[0]);
+        }
+        return events.find(e => e.isFeatured);
+    }, [apiFeatured, events]);
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
@@ -81,7 +120,7 @@ export default function EventsScreen() {
                         {/* Stats Row */}
                         <View style={styles.statsRow}>
                             <View style={styles.statItem}>
-                                <Text style={styles.statNumber}>{MOCK_EVENTS.length}+</Text>
+                                <Text style={styles.statNumber}>{events.length}+</Text>
                                 <Text style={styles.statLabel}>Events</Text>
                             </View>
                             <View style={[styles.statDivider, { backgroundColor: 'rgba(255,255,255,0.3)' }]} />
@@ -149,7 +188,11 @@ export default function EventsScreen() {
                                 <Text style={styles.featuredBadgeText}>Hot</Text>
                             </View>
                         </View>
-                        <TouchableOpacity style={styles.featuredCard} activeOpacity={0.9}>
+                        <TouchableOpacity
+                            style={styles.featuredCard}
+                            activeOpacity={0.9}
+                            onPress={() => router.push({ pathname: '/event/[id]' as any, params: { id: featuredEvent.id } })}
+                        >
                             <Image source={{ uri: featuredEvent.imageUrl }} style={styles.featuredImage} />
                             <LinearGradient
                                 colors={['transparent', 'rgba(0,0,0,0.9)']}
@@ -172,10 +215,10 @@ export default function EventsScreen() {
                                 </View>
                                 <View style={styles.featuredFooter}>
                                     <Text style={styles.featuredPrice}>{featuredEvent.priceRange}</Text>
-                                    <TouchableOpacity style={[styles.getTicketsButton, { backgroundColor: theme.primary }]}>
+                                    <View style={[styles.getTicketsButton, { backgroundColor: theme.primary }]}>
                                         <Text style={styles.getTicketsText}>Get Tickets</Text>
                                         <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
-                                    </TouchableOpacity>
+                                    </View>
                                 </View>
                             </View>
                         </TouchableOpacity>
@@ -199,7 +242,13 @@ export default function EventsScreen() {
                         { maxWidth: isDesktop ? 1000 : 600, alignSelf: 'center', width: '100%' }
                     ]}>
                         {filteredEvents.map((event) => (
-                            <EventCard key={event.id} event={event} theme={theme} isCompact={!isTablet} />
+                            <EventCard
+                                key={event.id}
+                                event={event}
+                                theme={theme}
+                                isCompact={!isTablet}
+                                onPress={() => router.push({ pathname: '/event/[id]' as any, params: { id: event.id } })}
+                            />
                         ))}
                     </View>
 
@@ -233,9 +282,10 @@ interface EventCardProps {
     event: Event;
     theme: typeof Colors.light;
     isCompact?: boolean;
+    onPress: () => void;
 }
 
-const EventCard: React.FC<EventCardProps> = ({ event, theme, isCompact }) => (
+const EventCard: React.FC<EventCardProps> = ({ event, theme, isCompact, onPress }) => (
     <TouchableOpacity
         style={[
             styles.eventCard,
@@ -243,6 +293,7 @@ const EventCard: React.FC<EventCardProps> = ({ event, theme, isCompact }) => (
             isCompact && styles.eventCardCompact
         ]}
         activeOpacity={0.9}
+        onPress={onPress}
     >
         <View style={[styles.eventImageWrapper, isCompact && styles.eventImageWrapperCompact]}>
             <Image source={{ uri: event.imageUrl }} style={styles.eventImage} />

@@ -81,6 +81,10 @@ export class EventsService {
     // Add computed fields
     const eventsWithStats = events.map((event) => ({
       ...event,
+      ticketTypes: event.ticketTypes.map((t) => ({
+        ...t,
+        available: t.quantity - t.sold,
+      })),
       minPrice: Math.min(...event.ticketTypes.map((t) => t.price)),
       maxPrice: Math.max(...event.ticketTypes.map((t) => t.price)),
       ticketsAvailable: event.ticketTypes.reduce(
@@ -129,8 +133,16 @@ export class EventsService {
 
     return events.map((event) => ({
       ...event,
+      ticketTypes: event.ticketTypes.map((t) => ({
+        ...t,
+        available: t.quantity - t.sold,
+      })),
       minPrice: Math.min(...event.ticketTypes.map((t) => t.price)),
       maxPrice: Math.max(...event.ticketTypes.map((t) => t.price)),
+      ticketsAvailable: event.ticketTypes.reduce(
+        (sum, t) => sum + (t.quantity - t.sold),
+        0,
+      ),
     }));
   }
 
@@ -157,6 +169,10 @@ export class EventsService {
 
     return {
       ...event,
+      ticketTypes: event.ticketTypes.map((t) => ({
+        ...t,
+        available: t.quantity - t.sold,
+      })),
       minPrice: Math.min(...event.ticketTypes.map((t) => t.price)),
       maxPrice: Math.max(...event.ticketTypes.map((t) => t.price)),
       ticketsAvailable: event.ticketTypes.reduce(

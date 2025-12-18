@@ -1,10 +1,10 @@
 import {
   IsString,
   IsNotEmpty,
-  IsPhoneNumber,
   Length,
   IsOptional,
   IsEmail,
+  MinLength,
 } from 'class-validator';
 
 export class SendOtpDto {
@@ -47,11 +47,56 @@ export class LoginDto {
   code: string;
 }
 
+// Email/Password Authentication DTOs
+export class EmailRegisterDto {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @MinLength(8)
+  password: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
+}
+
+export class EmailLoginDto {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  password: string;
+}
+
+export class ForgotPasswordDto {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+
+  @IsString()
+  @MinLength(8)
+  newPassword: string;
+}
+
 export class AuthResponseDto {
   accessToken: string;
   user: {
     id: string;
-    phone: string;
+    phone: string | null;
     name: string | null;
     email: string | null;
     role: string;
