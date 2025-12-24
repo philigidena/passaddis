@@ -10,6 +10,9 @@ async function bootstrap() {
     origin: [
       'http://localhost:8081',
       'http://localhost:19006',
+      'http://localhost:5173',
+      'https://passaddis.com',
+      'https://www.passaddis.com',
       'https://passaddis.vercel.app',
       process.env.FRONTEND_URL,
     ].filter((url): url is string => Boolean(url)),
