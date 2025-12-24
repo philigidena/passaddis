@@ -3,9 +3,8 @@
  * Centralized API service for all backend communication
  */
 
-const API_BASE_URL = __DEV__
-  ? 'http://localhost:3000/api'
-  : 'https://passaddis-dev-backend-env.eba-bvsaimrn.eu-north-1.elasticbeanstalk.com/api';
+// Always use the production backend (localhost doesn't work on mobile devices)
+const API_BASE_URL = 'http://passaddis-dev-backend-env.eba-bvsaimrn.eu-north-1.elasticbeanstalk.com/api';
 
 // Types
 export interface ApiResponse<T> {
