@@ -1,4 +1,4 @@
-// PassAddis Database Schema - SQLite for Local Development
+// PassAddis Database Schema - PostgreSQL for Production
 // Event ticketing + Shop with supermarket pickup
 
 generator client {
@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
