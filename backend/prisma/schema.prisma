@@ -1,4 +1,4 @@
-// PassAddis Database Schema - PostgreSQL for Production
+// PassAddis Database Schema
 // Event ticketing + Shop with supermarket pickup
 
 generator client {
@@ -19,7 +19,7 @@ model User {
   name          String?
   passwordHash  String?
   isVerified    Boolean   @default(false)
-  role          String    @default("USER") // USER, ORGANIZER, ADMIN
+  role          UserRole  @default(USER)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -31,6 +31,12 @@ model User {
   otpCodes      OtpCode[]
 
   @@map("users")
+}
+
+enum UserRole {
+  USER
+  ORGANIZER
+  ADMIN
 }
 
 model OtpCode {
@@ -50,43 +56,43 @@ model OtpCode {
 // ============== MERCHANTS (Sub-merchants under PassAddis) ==============
 
 model Merchant {
-  id              String   @id @default(uuid())
-  merchantCode    String   @unique
+  id              String         @id @default(uuid())
+  merchantCode    String         @unique  // Sub-merchant ID (e.g., PA001, PA002)
   businessName    String
-  tradeName       String?
+  tradeName       String?        // Display name
   description     String?
   logo            String?
-  type            String   @default("ORGANIZER") // ORGANIZER, SHOP, SUPERMARKET, VENDOR
-  status          String   @default("PENDING") // PENDING, ACTIVE, SUSPENDED, BLOCKED
+  type            MerchantType   @default(ORGANIZER)
+  status          MerchantStatus @default(PENDING)
 
   // Business details
-  tinNumber       String?
+  tinNumber       String?        // Tax ID
   licenseNumber   String?
   businessAddress String?
-  city            String   @default("Addis Ababa")
+  city            String         @default("Addis Ababa")
 
   // Settlement info
   bankName        String?
   bankAccount     String?
-  telebirrAccount String?
-  cbeBirrAccount  String?
+  telebirrAccount String?        // For Telebirr payouts
+  cbeBirrAccount  String?        // For CBE Birr payouts
 
   // Commission & fees
-  commissionRate  Float    @default(5.0)
-  settlementDays  Int      @default(3)
-  minPayout       Float    @default(100)
+  commissionRate  Float          @default(5.0)  // PassAddis takes 5%
+  settlementDays  Int            @default(3)    // T+3 settlement
+  minPayout       Float          @default(100)  // Min 100 ETB to settle
 
   // Verification
-  isVerified      Boolean  @default(false)
+  isVerified      Boolean        @default(false)
   verifiedAt      DateTime?
   verifiedBy      String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   // Relations
-  user            User     @relation(fields: [userId], references: [id])
-  userId          String   @unique
+  user            User           @relation(fields: [userId], references: [id])
+  userId          String         @unique
   events          Event[]
   settlements     Settlement[]
   walletTransactions WalletTransaction[]
@@ -94,46 +100,75 @@ model Merchant {
   @@map("merchants")
 }
 
+enum MerchantType {
+  ORGANIZER      // Event organizers
+  SHOP           // Shop partners
+  SUPERMARKET    // Pickup location partners
+  VENDOR         // Other vendors
+}
+
+enum MerchantStatus {
+  PENDING        // Awaiting verification
+  ACTIVE         // Verified and active
+  SUSPENDED      // Temporarily suspended
+  BLOCKED        // Permanently blocked
+}
+
 // ============== MERCHANT WALLET ==============
 
 model WalletTransaction {
-  id            String   @id @default(uuid())
-  type          String   // CREDIT, DEBIT, FEE, REFUND, ADJUSTMENT
+  id            String              @id @default(uuid())
+  type          WalletTransactionType
   amount        Float
-  fee           Float    @default(0)
-  netAmount     Float
+  fee           Float               @default(0)
+  netAmount     Float               // amount - fee
   balanceBefore Float
   balanceAfter  Float
   description   String?
-  reference     String?
-  createdAt     DateTime @default(now())
+  reference     String?             // Order ID or Settlement ID
+  createdAt     DateTime            @default(now())
 
-  merchant      Merchant @relation(fields: [merchantId], references: [id])
+  merchant      Merchant            @relation(fields: [merchantId], references: [id])
   merchantId    String
 
   @@map("wallet_transactions")
 }
 
+enum WalletTransactionType {
+  CREDIT         // Money in (from sales)
+  DEBIT          // Money out (settlement)
+  FEE            // Platform fee deduction
+  REFUND         // Refund to customer
+  ADJUSTMENT     // Manual adjustment
+}
+
 // ============== SETTLEMENTS ==============
 
 model Settlement {
-  id              String   @id @default(uuid())
-  settlementRef   String   @unique
+  id              String           @id @default(uuid())
+  settlementRef   String           @unique  // e.g., STL-20241215-001
   amount          Float
-  fee             Float    @default(0)
+  fee             Float            @default(0)
   netAmount       Float
-  status          String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
-  method          String   // CHAPA, TELEBIRR, CBE_BIRR, BANK_TRANSFER
-  bankRef         String?
+  status          SettlementStatus @default(PENDING)
+  method          PaymentMethod
+  bankRef         String?          // Bank transfer reference
   processedAt     DateTime?
   failureReason   String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
-  merchant        Merchant @relation(fields: [merchantId], references: [id])
+  merchant        Merchant         @relation(fields: [merchantId], references: [id])
   merchantId      String
 
   @@map("settlements")
+}
+
+enum SettlementStatus {
+  PENDING        // Awaiting processing
+  PROCESSING     // Being processed
+  COMPLETED      // Successfully settled
+  FAILED         // Settlement failed
 }
 
 // ============== ORGANIZERS (Legacy - now Merchant) ==============
@@ -159,31 +194,49 @@ model Organizer {
 // ============== EVENTS ==============
 
 model Event {
-  id            String   @id @default(uuid())
+  id            String      @id @default(uuid())
   title         String
   description   String
   imageUrl      String?
   venue         String
   address       String?
-  city          String   @default("Addis Ababa")
+  city          String      @default("Addis Ababa")
   date          DateTime
   endDate       DateTime?
-  category      String   // MUSIC, SPORTS, ARTS, COMEDY, FESTIVAL, CONFERENCE, NIGHTLIFE, OTHER
-  status        String   @default("DRAFT") // DRAFT, PUBLISHED, CANCELLED, COMPLETED
-  isFeatured    Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  category      EventCategory
+  status        EventStatus @default(DRAFT)
+  isFeatured    Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   // Can be linked to either Organizer (legacy) or Merchant (new)
-  organizer     Organizer? @relation(fields: [organizerId], references: [id])
+  organizer     Organizer?  @relation(fields: [organizerId], references: [id])
   organizerId   String?
-  merchant      Merchant?  @relation(fields: [merchantId], references: [id])
+  merchant      Merchant?   @relation(fields: [merchantId], references: [id])
   merchantId    String?
 
   ticketTypes   TicketType[]
   tickets       Ticket[]
 
   @@map("events")
+}
+
+enum EventCategory {
+  MUSIC
+  SPORTS
+  ARTS
+  COMEDY
+  FESTIVAL
+  CONFERENCE
+  NIGHTLIFE
+  OTHER
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
 }
 
 // ============== TICKETS ==============
@@ -207,22 +260,29 @@ model TicketType {
 }
 
 model Ticket {
-  id          String    @id @default(uuid())
-  qrCode      String    @unique
-  status      String    @default("VALID") // VALID, USED, CANCELLED, EXPIRED
+  id          String       @id @default(uuid())
+  qrCode      String       @unique
+  status      TicketStatus @default(VALID)
   usedAt      DateTime?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime     @default(now())
 
-  user        User      @relation(fields: [userId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
   userId      String
-  event       Event     @relation(fields: [eventId], references: [id])
+  event       Event        @relation(fields: [eventId], references: [id])
   eventId     String
-  ticketType  TicketType @relation(fields: [ticketTypeId], references: [id])
+  ticketType  TicketType   @relation(fields: [ticketTypeId], references: [id])
   ticketTypeId String
-  order       Order?    @relation(fields: [orderId], references: [id])
+  order       Order?       @relation(fields: [orderId], references: [id])
   orderId     String?
 
   @@map("tickets")
+}
+
+enum TicketStatus {
+  VALID
+  USED
+  CANCELLED
+  EXPIRED
 }
 
 // ============== SHOP ==============
@@ -233,7 +293,7 @@ model ShopItem {
   description String?
   price       Float
   imageUrl    String?
-  category    String   // WATER, DRINKS, SNACKS, MERCH
+  category    ShopCategory
   inStock     Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -241,6 +301,13 @@ model ShopItem {
   orderItems  OrderItem[]
 
   @@map("shop_items")
+}
+
+enum ShopCategory {
+  WATER
+  DRINKS
+  SNACKS
+  MERCH
 }
 
 model PickupLocation {
@@ -261,23 +328,23 @@ model PickupLocation {
 // ============== ORDERS ==============
 
 model Order {
-  id              String   @id @default(uuid())
-  orderNumber     String   @unique
-  status          String   @default("PENDING") // PENDING, PAID, READY_FOR_PICKUP, COMPLETED, CANCELLED, REFUNDED
+  id              String        @id @default(uuid())
+  orderNumber     String        @unique
+  status          OrderStatus   @default(PENDING)
   subtotal        Float
-  serviceFee      Float    @default(0)
-  platformFee     Float    @default(0)
+  serviceFee      Float         @default(0)
+  platformFee     Float         @default(0)  // PassAddis commission
   total           Float
-  merchantAmount  Float?
-  paymentMethod   String?  // CHAPA, TELEBIRR, CBE_BIRR, BANK_TRANSFER
+  merchantAmount  Float?        // Amount to be settled to merchant
+  paymentMethod   PaymentMethod?
   paymentRef      String?
-  qrCode          String?  @unique
+  qrCode          String?       @unique
   pickedUpAt      DateTime?
-  settledAt       DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  settledAt       DateTime?     // When merchant was paid
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id])
+  user            User          @relation(fields: [userId], references: [id])
   userId          String
   pickupLocation  PickupLocation? @relation(fields: [pickupLocationId], references: [id])
   pickupLocationId String?
@@ -287,6 +354,15 @@ model Order {
   payment         Payment?
 
   @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  READY_FOR_PICKUP
+  COMPLETED
+  CANCELLED
+  REFUNDED
 }
 
 model OrderItem {
@@ -306,18 +382,33 @@ model OrderItem {
 // ============== PAYMENTS ==============
 
 model Payment {
-  id            String   @id @default(uuid())
+  id            String        @id @default(uuid())
   amount        Float
-  currency      String   @default("ETB")
-  method        String   // CHAPA, TELEBIRR, CBE_BIRR, BANK_TRANSFER
-  status        String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED, REFUNDED
+  currency      String        @default("ETB")
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
   providerRef   String?
-  providerData  String?  // JSON string for SQLite
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  providerData  Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  order         Order    @relation(fields: [orderId], references: [id])
-  orderId       String   @unique
+  order         Order         @relation(fields: [orderId], references: [id])
+  orderId       String        @unique
 
   @@map("payments")
+}
+
+enum PaymentMethod {
+  CHAPA
+  TELEBIRR
+  CBE_BIRR
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
 }
