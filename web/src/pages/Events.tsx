@@ -56,7 +56,7 @@ export function EventsPage() {
             </p>
 
             {/* Search */}
-            <form onSubmit={handleSearch} className="mt-8 flex gap-4">
+            <form onSubmit={handleSearch} className="mt-8 flex flex-col sm:flex-row gap-4">
               <div className="flex-1 max-w-xl">
                 <Input
                   placeholder="Search events, venues..."
@@ -65,7 +65,7 @@ export function EventsPage() {
                   leftIcon={<Search className="w-5 h-5" />}
                 />
               </div>
-              <Button type="submit" leftIcon={<Search className="w-4 h-4" />}>
+              <Button type="submit" leftIcon={<Search className="w-4 h-4" />} className="w-full sm:w-auto">
                 Search
               </Button>
             </form>
