@@ -8,6 +8,9 @@ import { EventsModule } from './events/events.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { ShopModule } from './shop/shop.module';
 import { PaymentsModule } from './payments/payments.module';
+import { AdminModule } from './admin/admin.module';
+import { OrganizerModule } from './organizer/organizer.module';
+import { ShopOwnerModule } from './shop-owner/shop-owner.module';
 
 @Module({
   imports: [
@@ -21,6 +24,9 @@ import { PaymentsModule } from './payments/payments.module';
     TicketsModule,
     ShopModule,
     PaymentsModule,
+    AdminModule,
+    OrganizerModule,
+    ShopOwnerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

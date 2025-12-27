@@ -1,18 +1,16 @@
-import type { InputHTMLAttributes, ReactNode } from 'react';
+import type { TextareaHTMLAttributes } from 'react';
 import { forwardRef, useState } from 'react';
 import clsx from 'clsx';
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
   hint?: string;
-  leftIcon?: ReactNode;
-  rightIcon?: ReactNode;
   variant?: 'default' | 'filled';
 }
 
-export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, hint, leftIcon, rightIcon, className, variant = 'default', ...props }, ref) => {
+export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
+  ({ label, error, hint, className, variant = 'default', ...props }, ref) => {
     const [isFocused, setIsFocused] = useState(false);
 
     return (
@@ -24,15 +22,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           </label>
         )}
         <div className="relative group">
-          {leftIcon && (
-            <div className={clsx(
-              'absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-200',
-              isFocused ? 'text-primary' : 'text-white/40 group-hover:text-white/60'
-            )}>
-              {leftIcon}
-            </div>
-          )}
-          <input
+          <textarea
             ref={ref}
             onFocus={(e) => {
               setIsFocused(true);
@@ -43,8 +33,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               props.onBlur?.(e);
             }}
             className={clsx(
-              'w-full rounded-xl text-white placeholder-white/30 transition-all duration-200',
-              'focus:outline-none',
+              'w-full rounded-xl text-white placeholder-white/30 transition-all duration-200 resize-none',
+              'focus:outline-none min-h-[120px]',
               // Variant styles
               variant === 'default' && [
                 'bg-dark-bg border-2 px-4 py-3.5',
@@ -58,23 +48,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                   ? 'border-red-500/50 focus:border-red-500 focus:bg-white/10'
                   : 'hover:bg-white/8 focus:bg-white/10 focus:border-primary/50',
               ],
-              // Icon padding
-              leftIcon && 'pl-12',
-              rightIcon && 'pr-12',
               // Disabled state
               props.disabled && 'opacity-50 cursor-not-allowed',
               className
             )}
             {...props}
           />
-          {rightIcon && (
-            <div className={clsx(
-              'absolute right-4 top-1/2 -translate-y-1/2 transition-colors duration-200',
-              isFocused ? 'text-white/60' : 'text-white/40'
-            )}>
-              {rightIcon}
-            </div>
-          )}
           {/* Focus ring effect */}
           <div className={clsx(
             'absolute inset-0 rounded-xl pointer-events-none transition-opacity duration-200',
@@ -96,4 +75,4 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
   }
 );
 
-Input.displayName = 'Input';
+TextArea.displayName = 'TextArea';

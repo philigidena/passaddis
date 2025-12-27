@@ -36,6 +36,7 @@ model User {
 enum UserRole {
   USER
   ORGANIZER
+  SHOP_OWNER
   ADMIN
 }
 
@@ -194,20 +195,27 @@ model Organizer {
 // ============== EVENTS ==============
 
 model Event {
-  id            String      @id @default(uuid())
-  title         String
-  description   String
-  imageUrl      String?
-  venue         String
-  address       String?
-  city          String      @default("Addis Ababa")
-  date          DateTime
-  endDate       DateTime?
-  category      EventCategory
-  status        EventStatus @default(DRAFT)
-  isFeatured    Boolean     @default(false)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String      @id @default(uuid())
+  title           String
+  description     String
+  imageUrl        String?
+  venue           String
+  address         String?
+  city            String      @default("Addis Ababa")
+  date            DateTime
+  endDate         DateTime?
+  category        EventCategory
+  status          EventStatus @default(DRAFT)
+  isFeatured      Boolean     @default(false)
+
+  // Approval workflow
+  submittedAt     DateTime?   // When submitted for approval
+  approvedAt      DateTime?   // When approved by admin
+  approvedBy      String?     // Admin user ID who approved
+  rejectionReason String?     // Reason if rejected
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   // Can be linked to either Organizer (legacy) or Merchant (new)
   organizer     Organizer?  @relation(fields: [organizerId], references: [id])
@@ -233,10 +241,13 @@ enum EventCategory {
 }
 
 enum EventStatus {
-  DRAFT
-  PUBLISHED
-  CANCELLED
-  COMPLETED
+  DRAFT           // Initial state when organizer creates event
+  PENDING         // Submitted for admin approval
+  APPROVED        // Admin approved, ready to publish
+  PUBLISHED       // Live and visible to public
+  REJECTED        // Admin rejected
+  CANCELLED       // Event cancelled
+  COMPLETED       // Event has ended
 }
 
 // ============== TICKETS ==============

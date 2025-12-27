@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Ticket, User, LogOut, Calendar, ShoppingBag } from 'lucide-react';
+import { Menu, X, Ticket, User, LogOut, Calendar, ShoppingBag, LayoutDashboard, Building2, Store } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import clsx from 'clsx';
@@ -13,6 +13,23 @@ export function Navbar() {
     logout();
     navigate('/');
   };
+
+  // Get dashboard link based on role
+  const getDashboardLink = () => {
+    if (!user) return null;
+    switch (user.role) {
+      case 'ADMIN':
+        return { path: '/admin', label: 'Admin Panel', icon: LayoutDashboard };
+      case 'ORGANIZER':
+        return { path: '/organizer', label: 'Organizer Portal', icon: Building2 };
+      case 'SHOP_OWNER':
+        return { path: '/shop-owner', label: 'Shop Dashboard', icon: Store };
+      default:
+        return { path: '/organizer', label: 'Become Organizer', icon: Building2 };
+    }
+  };
+
+  const dashboardLink = getDashboardLink();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass">
@@ -49,6 +66,15 @@ export function Navbar() {
               >
                 <Ticket className="w-4 h-4" />
                 My Tickets
+              </Link>
+            )}
+            {isAuthenticated && dashboardLink && (
+              <Link
+                to={dashboardLink.path}
+                className="text-white/70 hover:text-white transition-colors flex items-center gap-2"
+              >
+                <dashboardLink.icon className="w-4 h-4" />
+                {dashboardLink.label}
               </Link>
             )}
           </div>
@@ -131,6 +157,15 @@ export function Navbar() {
               >
                 My Tickets
               </Link>
+              {dashboardLink && (
+                <Link
+                  to={dashboardLink.path}
+                  className="block text-white/70 hover:text-white transition-colors"
+                  onClick={() => setIsOpen(false)}
+                >
+                  {dashboardLink.label}
+                </Link>
+              )}
               <Link
                 to="/profile"
                 className="block text-white/70 hover:text-white transition-colors"

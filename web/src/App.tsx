@@ -1,12 +1,18 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider } from '@/context/AuthContext';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { HomePage } from '@/pages/Home';
 import { EventsPage } from '@/pages/Events';
 import { EventDetailPage } from '@/pages/EventDetail';
 import { SignInPage } from '@/pages/SignIn';
 import { TicketsPage } from '@/pages/Tickets';
 import { TicketDetailPage } from '@/pages/TicketDetail';
+import { AdminDashboard } from '@/pages/admin/AdminDashboard';
+import { AdminEvents } from '@/pages/admin/AdminEvents';
+import { OrganizerDashboard } from '@/pages/organizer/OrganizerDashboard';
+import { OrganizerEvents } from '@/pages/organizer/OrganizerEvents';
+import { ProfilePage } from '@/pages/Profile';
+import type { ReactNode } from 'react';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,23 +23,177 @@ const queryClient = new QueryClient({
   },
 });
 
+// Protected Route wrapper
+function ProtectedRoute({
+  children,
+  allowedRoles,
+}: {
+  children: ReactNode;
+  allowedRoles?: string[];
+}) {
+  const { user, isLoading, isAuthenticated } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/signin" replace />;
+  }
+
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Public Routes */}
+      <Route path="/" element={<HomePage />} />
+      <Route path="/events" element={<EventsPage />} />
+      <Route path="/events/:id" element={<EventDetailPage />} />
+      <Route path="/signin" element={<SignInPage />} />
+
+      {/* Protected User Routes */}
+      <Route
+        path="/tickets"
+        element={
+          <ProtectedRoute>
+            <TicketsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tickets/:id"
+        element={
+          <ProtectedRoute>
+            <TicketDetailPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin Routes */}
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/events"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <AdminEvents />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ComingSoon title="User Management" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/organizers"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ComingSoon title="Organizer Management" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/shop"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ComingSoon title="Shop Management" />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Organizer Routes */}
+      <Route
+        path="/organizer"
+        element={
+          <ProtectedRoute allowedRoles={['ORGANIZER', 'ADMIN', 'USER']}>
+            <OrganizerDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/organizer/events"
+        element={
+          <ProtectedRoute allowedRoles={['ORGANIZER', 'ADMIN']}>
+            <OrganizerEvents />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/organizer/events/new"
+        element={
+          <ProtectedRoute allowedRoles={['ORGANIZER', 'ADMIN']}>
+            <OrganizerEvents />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/organizer/wallet"
+        element={
+          <ProtectedRoute allowedRoles={['ORGANIZER', 'ADMIN']}>
+            <ComingSoon title="Wallet" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/organizer/settings"
+        element={
+          <ProtectedRoute allowedRoles={['ORGANIZER', 'ADMIN', 'USER']}>
+            <ComingSoon title="Organizer Settings" />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Shop Owner Routes */}
+      <Route
+        path="/shop-owner"
+        element={
+          <ProtectedRoute allowedRoles={['SHOP_OWNER', 'ADMIN']}>
+            <ComingSoon title="Shop Owner Dashboard" />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Other Routes */}
+      <Route path="/shop" element={<ComingSoon title="Shop" />} />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/events" element={<EventsPage />} />
-            <Route path="/events/:id" element={<EventDetailPage />} />
-            <Route path="/signin" element={<SignInPage />} />
-            <Route path="/tickets" element={<TicketsPage />} />
-            <Route path="/tickets/:id" element={<TicketDetailPage />} />
-            {/* TODO: Add more routes */}
-            <Route path="/shop" element={<ComingSoon title="Shop" />} />
-            <Route path="/profile" element={<ComingSoon title="Profile" />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppRoutes />
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>

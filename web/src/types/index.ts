@@ -4,7 +4,83 @@ export interface User {
   phone: string;
   name: string | null;
   email: string | null;
-  role: 'USER' | 'ORGANIZER' | 'ADMIN';
+  role: 'USER' | 'ORGANIZER' | 'SHOP_OWNER' | 'ADMIN';
+}
+
+// Merchant/Organizer Profile
+export interface MerchantProfile {
+  id: string;
+  merchantCode: string;
+  businessName: string;
+  tradeName?: string;
+  description?: string;
+  logo?: string;
+  type: 'ORGANIZER' | 'SHOP' | 'SUPERMARKET' | 'VENDOR';
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'BLOCKED';
+  isVerified: boolean;
+  commissionRate: number;
+  city: string;
+  user?: User;
+}
+
+// Dashboard Stats
+export interface AdminDashboardStats {
+  users: {
+    total: number;
+    newThisMonth: number;
+    byRole: Record<string, number>;
+  };
+  events: {
+    total: number;
+    pending: number;
+    published: number;
+    thisMonth: number;
+  };
+  tickets: {
+    totalSold: number;
+    revenue: number;
+    thisMonth: {
+      sold: number;
+      revenue: number;
+    };
+  };
+  orders: {
+    total: number;
+    pending: number;
+    completed: number;
+    revenue: number;
+  };
+}
+
+export interface OrganizerDashboardStats {
+  profile: {
+    id: string;
+    businessName: string;
+    status: string;
+    isVerified: boolean;
+    commissionRate: number;
+  };
+  events: {
+    total: number;
+    draft: number;
+    pending: number;
+    approved: number;
+    published: number;
+    rejected: number;
+  };
+  tickets: {
+    totalSold: number;
+    revenue: number;
+    thisMonth: {
+      sold: number;
+      revenue: number;
+    };
+  };
+  wallet: {
+    balance: number;
+    pendingSettlement: number;
+    totalEarnings: number;
+  };
 }
 
 export interface AuthResponse {

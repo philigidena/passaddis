@@ -12,6 +12,9 @@ import type {
   ShopOrder,
   PickupLocation,
   PaginatedResponse,
+  AdminDashboardStats,
+  OrganizerDashboardStats,
+  MerchantProfile,
 } from '@/types';
 
 // API base URL - uses Vite proxy in development
@@ -194,6 +197,176 @@ export const shopApi = {
     handleResponse<{ valid: boolean; message: string; order?: ShopOrder }>(
       api.post('/shop/validate-pickup', { qrCode })
     ),
+};
+
+// ============== ADMIN API ==============
+export const adminApi = {
+  getDashboard: () => handleResponse<AdminDashboardStats>(api.get('/admin/dashboard')),
+
+  // Users
+  getUsers: (params?: { search?: string; role?: string; page?: number; limit?: number }) =>
+    handleResponse<PaginatedResponse<User>>(api.get('/admin/users', { params })),
+
+  getUser: (id: string) => handleResponse<User>(api.get(`/admin/users/${id}`)),
+
+  updateUserRole: (id: string, role: string) =>
+    handleResponse<User>(api.patch(`/admin/users/${id}/role`, { role })),
+
+  // Events
+  getAllEvents: (params?: { status?: string; search?: string; page?: number }) =>
+    handleResponse<PaginatedResponse<Event>>(api.get('/admin/events', { params })),
+
+  getPendingEvents: (params?: { page?: number }) =>
+    handleResponse<PaginatedResponse<Event>>(api.get('/admin/events/pending', { params })),
+
+  approveEvent: (id: string, featured?: boolean) =>
+    handleResponse<Event>(api.post(`/admin/events/${id}/approve`, { featured })),
+
+  rejectEvent: (id: string, reason: string) =>
+    handleResponse<Event>(api.post(`/admin/events/${id}/reject`, { reason })),
+
+  toggleEventFeatured: (id: string) =>
+    handleResponse<Event>(api.patch(`/admin/events/${id}/featured`)),
+
+  // Organizers
+  getOrganizers: (params?: { status?: string; verified?: boolean; search?: string }) =>
+    handleResponse<PaginatedResponse<MerchantProfile>>(api.get('/admin/organizers', { params })),
+
+  verifyOrganizer: (id: string, commissionRate?: number) =>
+    handleResponse<MerchantProfile>(api.post(`/admin/organizers/${id}/verify`, { commissionRate })),
+
+  suspendOrganizer: (id: string, reason: string) =>
+    handleResponse<MerchantProfile>(api.post(`/admin/organizers/${id}/suspend`, { reason })),
+
+  // Shop Items
+  getShopItems: () => handleResponse<ShopItem[]>(api.get('/admin/shop/items')),
+
+  createShopItem: (data: Partial<ShopItem>) =>
+    handleResponse<ShopItem>(api.post('/admin/shop/items', data)),
+
+  updateShopItem: (id: string, data: Partial<ShopItem>) =>
+    handleResponse<ShopItem>(api.patch(`/admin/shop/items/${id}`, data)),
+
+  deleteShopItem: (id: string) =>
+    handleResponse<void>(api.delete(`/admin/shop/items/${id}`)),
+
+  // Pickup Locations
+  getPickupLocations: () => handleResponse<PickupLocation[]>(api.get('/admin/pickup-locations')),
+
+  createPickupLocation: (data: Partial<PickupLocation>) =>
+    handleResponse<PickupLocation>(api.post('/admin/pickup-locations', data)),
+
+  updatePickupLocation: (id: string, data: Partial<PickupLocation>) =>
+    handleResponse<PickupLocation>(api.patch(`/admin/pickup-locations/${id}`, data)),
+
+  deletePickupLocation: (id: string) =>
+    handleResponse<void>(api.delete(`/admin/pickup-locations/${id}`)),
+};
+
+// ============== ORGANIZER API ==============
+export const organizerApi = {
+  getProfile: () => handleResponse<MerchantProfile>(api.get('/organizer/profile')),
+
+  createProfile: (data: {
+    businessName: string;
+    tradeName?: string;
+    description?: string;
+    city?: string;
+    bankName?: string;
+    bankAccount?: string;
+  }) => handleResponse<MerchantProfile>(api.post('/organizer/profile', data)),
+
+  updateProfile: (data: Partial<MerchantProfile>) =>
+    handleResponse<MerchantProfile>(api.patch('/organizer/profile', data)),
+
+  getDashboard: () => handleResponse<OrganizerDashboardStats>(api.get('/organizer/dashboard')),
+
+  // Events
+  getMyEvents: () => handleResponse<Event[]>(api.get('/organizer/events')),
+
+  getEvent: (id: string) => handleResponse<Event>(api.get(`/organizer/events/${id}`)),
+
+  createEvent: (data: {
+    title: string;
+    description: string;
+    venue: string;
+    date: string;
+    category: string;
+    ticketTypes: Array<{
+      name: string;
+      price: number;
+      quantity: number;
+      description?: string;
+    }>;
+    imageUrl?: string;
+    address?: string;
+    city?: string;
+    endDate?: string;
+  }) => handleResponse<Event>(api.post('/organizer/events', data)),
+
+  updateEvent: (id: string, data: Partial<Event>) =>
+    handleResponse<Event>(api.patch(`/organizer/events/${id}`, data)),
+
+  submitForApproval: (id: string) =>
+    handleResponse<Event>(api.post(`/organizer/events/${id}/submit`)),
+
+  publishEvent: (id: string) =>
+    handleResponse<Event>(api.post(`/organizer/events/${id}/publish`)),
+
+  cancelEvent: (id: string) =>
+    handleResponse<Event>(api.post(`/organizer/events/${id}/cancel`)),
+
+  // Attendees
+  getEventAttendees: (eventId: string) =>
+    handleResponse<{
+      stats: { total: number; valid: number; used: number; cancelled: number };
+      attendees: Ticket[];
+    }>(api.get(`/organizer/events/${eventId}/attendees`)),
+
+  // Ticket Types
+  addTicketType: (eventId: string, data: { name: string; price: number; quantity: number }) =>
+    handleResponse<any>(api.post(`/organizer/events/${eventId}/ticket-types`, data)),
+
+  updateTicketType: (eventId: string, ticketTypeId: string, data: Partial<any>) =>
+    handleResponse<any>(api.patch(`/organizer/events/${eventId}/ticket-types/${ticketTypeId}`, data)),
+
+  deleteTicketType: (eventId: string, ticketTypeId: string) =>
+    handleResponse<void>(api.delete(`/organizer/events/${eventId}/ticket-types/${ticketTypeId}`)),
+};
+
+// ============== SHOP OWNER API ==============
+export const shopOwnerApi = {
+  getProfile: () => handleResponse<MerchantProfile>(api.get('/shop-owner/profile')),
+
+  createProfile: (data: {
+    businessName: string;
+    tradeName?: string;
+    description?: string;
+    city?: string;
+  }) => handleResponse<MerchantProfile>(api.post('/shop-owner/profile', data)),
+
+  updateProfile: (data: Partial<MerchantProfile>) =>
+    handleResponse<MerchantProfile>(api.patch('/shop-owner/profile', data)),
+
+  getDashboard: () => handleResponse<any>(api.get('/shop-owner/dashboard')),
+
+  // Orders
+  getOrders: (status?: string) =>
+    handleResponse<ShopOrder[]>(api.get('/shop-owner/orders', { params: { status } })),
+
+  getOrder: (id: string) => handleResponse<ShopOrder>(api.get(`/shop-owner/orders/${id}`)),
+
+  updateOrderStatus: (id: string, status: 'READY_FOR_PICKUP' | 'COMPLETED') =>
+    handleResponse<ShopOrder>(api.patch(`/shop-owner/orders/${id}/status`, { status })),
+
+  validatePickup: (qrCode: string) =>
+    handleResponse<{ valid: boolean; message: string; order?: any }>(
+      api.post('/shop-owner/validate-pickup', { qrCode })
+    ),
+
+  // Analytics
+  getAnalytics: (period: 'week' | 'month' | 'year' = 'month') =>
+    handleResponse<any>(api.get('/shop-owner/analytics', { params: { period } })),
 };
 
 export default api;

@@ -1,9 +1,32 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('Seeding database...');
+
+  // ==================== CREATE ADMIN USER ====================
+  let adminUser = await prisma.user.findFirst({
+    where: { email: 'admin@passaddis.com' },
+  });
+
+  if (!adminUser) {
+    const passwordHash = await bcrypt.hash('admin123', 10);
+    adminUser = await prisma.user.create({
+      data: {
+        phone: 'admin_0000000000',
+        email: 'admin@passaddis.com',
+        name: 'PassAddis Admin',
+        passwordHash,
+        role: 'ADMIN',
+        isVerified: true,
+      },
+    });
+    console.log('Created admin user:', adminUser.email);
+  } else {
+    console.log('Admin user exists:', adminUser.email);
+  }
 
   // Get the test user (created via OTP)
   const user = await prisma.user.findFirst({
@@ -12,6 +35,8 @@ async function main() {
 
   if (!user) {
     console.log('No test user found. Please login first via OTP.');
+    console.log('\n✅ Admin user seeded successfully!');
+    console.log('Admin login: admin@passaddis.com / admin123');
     return;
   }
 
