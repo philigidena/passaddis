@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { useColorScheme, Platform, useWindowDimensions } from 'react-native';
+import { useColorScheme, Platform, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
@@ -14,9 +14,13 @@ export default function TabLayout() {
   // Only show bottom tabs on mobile (width < 768)
   const isMobile = width < 768;
 
-  // Calculate proper bottom padding for safe area
-  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 8);
-  const tabBarHeight = 56 + bottomPadding;
+  // Calculate proper bottom padding for safe area - ensure minimum padding
+  const safeBottom = insets.bottom || 0;
+  const minBottomPadding = Platform.OS === 'ios' ? 20 : 12;
+  const bottomPadding = Math.max(safeBottom, minBottomPadding);
+
+  // Total tab bar height includes icons, labels, and safe area
+  const tabBarHeight = 60 + bottomPadding;
 
   return (
     <Tabs
@@ -28,21 +32,31 @@ export default function TabLayout() {
           backgroundColor: theme.card,
           borderTopColor: theme.border,
           borderTopWidth: 1,
-          paddingTop: 8,
+          paddingTop: 10,
           paddingBottom: bottomPadding,
           height: tabBarHeight,
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
+          // Don't use absolute positioning - let it flow naturally
+          elevation: 8, // Android shadow
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
         } : {
           display: 'none', // Hide tabs on desktop - use NavBar instead
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
-          marginTop: 2,
+          marginTop: 4,
+          marginBottom: 2,
         },
+        tabBarIconStyle: {
+          marginTop: 4,
+        },
+        // Ensure content doesn't go behind tab bar
+        sceneStyle: isMobile ? {
+          paddingBottom: tabBarHeight,
+        } : undefined,
       }}
     >
       <Tabs.Screen
