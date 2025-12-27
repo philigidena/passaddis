@@ -3,8 +3,13 @@
  * Centralized API service for all backend communication
  */
 
-// Always use the production backend (localhost doesn't work on mobile devices)
-const API_BASE_URL = 'http://passaddis-dev-backend-env.eba-bvsaimrn.eu-north-1.elasticbeanstalk.com/api';
+// Use relative URL for web (Vercel will proxy to backend)
+// Use full URL for native mobile apps
+import { Platform } from 'react-native';
+
+const API_BASE_URL = Platform.OS === 'web'
+  ? '/api'  // Vercel rewrites this to the backend
+  : 'http://passaddis-dev-backend-env.eba-bvsaimrn.eu-north-1.elasticbeanstalk.com/api';
 
 // Types
 export interface ApiResponse<T> {
