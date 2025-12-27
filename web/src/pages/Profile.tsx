@@ -15,7 +15,6 @@ import {
   Edit3,
   Save,
   X,
-  Loader2,
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
@@ -25,12 +24,6 @@ import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/context/AuthContext';
 import { authApi } from '@/lib/api';
 import clsx from 'clsx';
-
-interface ProfileSection {
-  title: string;
-  icon: React.ReactNode;
-  content: React.ReactNode;
-}
 
 export function ProfilePage() {
   const navigate = useNavigate();

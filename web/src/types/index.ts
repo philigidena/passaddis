@@ -5,6 +5,8 @@ export interface User {
   name: string | null;
   email: string | null;
   role: 'USER' | 'ORGANIZER' | 'SHOP_OWNER' | 'ADMIN';
+  isVerified?: boolean;
+  createdAt?: string;
 }
 
 // Merchant/Organizer Profile
@@ -101,7 +103,7 @@ export interface Event {
   imageUrl?: string;
   category: EventCategory;
   isFeatured: boolean;
-  status: 'DRAFT' | 'PUBLISHED' | 'CANCELLED' | 'COMPLETED';
+  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
   ticketTypes: TicketType[];
   organizer: {
     id: string;

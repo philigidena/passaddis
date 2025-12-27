@@ -5,7 +5,6 @@ import { adminApi } from '@/lib/api';
 import {
   DashboardLayout,
   StatCard,
-  DataTable,
   StatusBadge,
 } from '@/components/layout/DashboardLayout';
 import type { AdminDashboardStats, Event } from '@/types';
