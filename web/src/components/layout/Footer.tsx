@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Ticket, MapPin } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 
 export function Footer() {
   return (
@@ -8,11 +8,12 @@ export function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
-            <Link to="/" className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Ticket className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-white">PassAddis</span>
+            <Link to="/" className="inline-block mb-4">
+              <img
+                src="/images/PassAddis_Logo_white.png"
+                alt="PassAddis"
+                className="h-10 w-auto"
+              />
             </Link>
             <p className="text-white/60 text-sm mb-4">
               Ethiopia's event-first platform for ticketing, booking & curated shopping

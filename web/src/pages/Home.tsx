@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Ticket, Shield, Smartphone, Calendar, Star, Loader2 } from 'lucide-react';
+import { ArrowRight, Ticket, Shield, Smartphone, Calendar, Star, Loader2, Building2 } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { EventCard } from '@/components/events/EventCard';
 import { Button } from '@/components/ui/Button';
@@ -12,9 +12,9 @@ export function HomePage() {
     <Layout>
       {/* Hero Section */}
       <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
-        {/* Background */}
+        {/* Background - Using local hero image */}
         <div className="absolute inset-0 bg-gradient-to-br from-dark-bg via-dark-card to-dark-bg" />
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1920')] bg-cover bg-center opacity-20" />
+        <div className="absolute inset-0 bg-[url('/images/hero-bg.png')] bg-cover bg-center opacity-30" />
         <div className="absolute inset-0 bg-gradient-to-t from-dark-bg via-transparent to-transparent" />
 
         {/* Content */}
@@ -40,9 +40,9 @@ export function HomePage() {
                 Explore Events
               </Button>
             </Link>
-            <Link to="/signin">
-              <Button variant="outline" size="lg">
-                Get Started
+            <Link to="/organizer">
+              <Button variant="outline" size="lg" leftIcon={<Building2 className="w-5 h-5" />}>
+                Host Your Event
               </Button>
             </Link>
           </div>
