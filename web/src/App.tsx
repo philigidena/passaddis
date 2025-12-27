@@ -60,6 +60,7 @@ function AppRoutes() {
       <Route path="/events" element={<EventsPage />} />
       <Route path="/events/:id" element={<EventDetailPage />} />
       <Route path="/signin" element={<SignInPage />} />
+      <Route path="/login" element={<Navigate to="/signin" replace />} />
 
       {/* Protected User Routes */}
       <Route
