@@ -9,8 +9,16 @@ import { TicketsPage } from '@/pages/Tickets';
 import { TicketDetailPage } from '@/pages/TicketDetail';
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
 import { AdminEvents } from '@/pages/admin/AdminEvents';
+import { AdminUsers } from '@/pages/admin/AdminUsers';
+import { AdminOrganizers } from '@/pages/admin/AdminOrganizers';
+import { AdminShop } from '@/pages/admin/AdminShop';
 import { OrganizerDashboard } from '@/pages/organizer/OrganizerDashboard';
 import { OrganizerEvents } from '@/pages/organizer/OrganizerEvents';
+import { OrganizerWallet } from '@/pages/organizer/OrganizerWallet';
+import { OrganizerSettings } from '@/pages/organizer/OrganizerSettings';
+import { ShopOwnerDashboard } from '@/pages/shop-owner/ShopOwnerDashboard';
+import { ShopOwnerOrders } from '@/pages/shop-owner/ShopOwnerOrders';
+import { ShopOwnerScan } from '@/pages/shop-owner/ShopOwnerScan';
 import { ProfilePage } from '@/pages/Profile';
 import type { ReactNode } from 'react';
 
@@ -101,7 +109,7 @@ function AppRoutes() {
         path="/admin/users"
         element={
           <ProtectedRoute allowedRoles={['ADMIN']}>
-            <ComingSoon title="User Management" />
+            <AdminUsers />
           </ProtectedRoute>
         }
       />
@@ -109,7 +117,7 @@ function AppRoutes() {
         path="/admin/organizers"
         element={
           <ProtectedRoute allowedRoles={['ADMIN']}>
-            <ComingSoon title="Organizer Management" />
+            <AdminOrganizers />
           </ProtectedRoute>
         }
       />
@@ -117,7 +125,7 @@ function AppRoutes() {
         path="/admin/shop"
         element={
           <ProtectedRoute allowedRoles={['ADMIN']}>
-            <ComingSoon title="Shop Management" />
+            <AdminShop />
           </ProtectedRoute>
         }
       />
@@ -151,7 +159,7 @@ function AppRoutes() {
         path="/organizer/wallet"
         element={
           <ProtectedRoute allowedRoles={['ORGANIZER', 'ADMIN']}>
-            <ComingSoon title="Wallet" />
+            <OrganizerWallet />
           </ProtectedRoute>
         }
       />
@@ -159,7 +167,7 @@ function AppRoutes() {
         path="/organizer/settings"
         element={
           <ProtectedRoute allowedRoles={['ORGANIZER', 'ADMIN', 'USER']}>
-            <ComingSoon title="Organizer Settings" />
+            <OrganizerSettings />
           </ProtectedRoute>
         }
       />
@@ -168,8 +176,40 @@ function AppRoutes() {
       <Route
         path="/shop-owner"
         element={
+          <ProtectedRoute allowedRoles={['SHOP_OWNER', 'ADMIN', 'USER']}>
+            <ShopOwnerDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop-owner/orders"
+        element={
           <ProtectedRoute allowedRoles={['SHOP_OWNER', 'ADMIN']}>
-            <ComingSoon title="Shop Owner Dashboard" />
+            <ShopOwnerOrders />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop-owner/orders/:id"
+        element={
+          <ProtectedRoute allowedRoles={['SHOP_OWNER', 'ADMIN']}>
+            <ShopOwnerOrders />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop-owner/scan"
+        element={
+          <ProtectedRoute allowedRoles={['SHOP_OWNER', 'ADMIN']}>
+            <ShopOwnerScan />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop-owner/settings"
+        element={
+          <ProtectedRoute allowedRoles={['SHOP_OWNER', 'ADMIN', 'USER']}>
+            <ComingSoon title="Shop Owner Settings" />
           </ProtectedRoute>
         }
       />

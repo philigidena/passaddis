@@ -3,6 +3,7 @@ import { Calendar, MapPin, Clock, ArrowLeft, Loader2, Download } from 'lucide-re
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/Button';
 import { useTicket } from '@/hooks/useTickets';
+import { QRCodeSVG } from 'qrcode.react';
 import clsx from 'clsx';
 
 export function TicketDetailPage() {
@@ -134,17 +135,26 @@ export function TicketDetailPage() {
               </div>
 
               {/* QR Code */}
-              {ticket.status === 'VALID' && ticket.qrCodeImage && (
+              {ticket.status === 'VALID' && (
                 <div className="text-center">
                   <p className="text-white/60 text-sm mb-4">
                     Show this QR code at the entrance
                   </p>
                   <div className="bg-white p-4 rounded-2xl inline-block">
-                    <img
-                      src={ticket.qrCodeImage}
-                      alt="Ticket QR Code"
-                      className="w-48 h-48"
-                    />
+                    {ticket.qrCodeImage ? (
+                      <img
+                        src={ticket.qrCodeImage}
+                        alt="Ticket QR Code"
+                        className="w-48 h-48"
+                      />
+                    ) : (
+                      <QRCodeSVG
+                        value={ticket.qrCode}
+                        size={192}
+                        level="H"
+                        marginSize={0}
+                      />
+                    )}
                   </div>
                   <p className="text-white/40 text-xs mt-4 font-mono">{ticket.qrCode}</p>
                 </div>

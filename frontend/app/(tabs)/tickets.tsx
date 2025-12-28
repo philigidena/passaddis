@@ -22,6 +22,7 @@ import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { ticketsApi, Ticket } from '@/services/api';
+import QRCode from 'react-native-qrcode-svg';
 
 export default function TicketsScreen() {
   const router = useRouter();
@@ -33,6 +34,7 @@ export default function TicketsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
 
   const fetchTickets = async () => {
@@ -61,6 +63,22 @@ export default function TicketsScreen() {
     setRefreshing(true);
     await fetchTickets();
     setRefreshing(false);
+  };
+
+  // Fetch full ticket details including QR code image when ticket is selected
+  const handleTicketSelect = async (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    setTicketDetailLoading(true);
+    try {
+      const response = await ticketsApi.getTicket(ticket.id);
+      if (response.data) {
+        setSelectedTicket(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch ticket details:', error);
+    } finally {
+      setTicketDetailLoading(false);
+    }
   };
 
   const now = new Date();
@@ -171,7 +189,7 @@ export default function TicketsScreen() {
               <TouchableOpacity
                 key={ticket.id}
                 style={[styles.ticketCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-                onPress={() => setSelectedTicket(ticket)}
+                onPress={() => handleTicketSelect(ticket)}
               >
                 <Image
                   source={{ uri: ticket.event?.imageUrl || 'https://via.placeholder.com/100' }}
@@ -248,9 +266,31 @@ export default function TicketsScreen() {
             <ScrollView contentContainerStyle={styles.modalContent}>
               {/* QR Code Section */}
               <View style={[styles.qrSection, { backgroundColor: theme.card }]}>
-                <View style={styles.qrCodePlaceholder}>
-                  <Ionicons name="qr-code" size={160} color={theme.text} />
-                </View>
+                {ticketDetailLoading ? (
+                  <View style={styles.qrLoadingContainer}>
+                    <ActivityIndicator size="large" color={theme.primary} />
+                    <Text style={[styles.qrLoadingText, { color: theme.textSecondary }]}>
+                      Loading QR Code...
+                    </Text>
+                  </View>
+                ) : selectedTicket.qrCodeImage ? (
+                  <View style={styles.qrCodeContainer}>
+                    <Image
+                      source={{ uri: selectedTicket.qrCodeImage }}
+                      style={styles.qrCodeImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.qrCodeContainer}>
+                    <QRCode
+                      value={selectedTicket.qrCode}
+                      size={200}
+                      backgroundColor="white"
+                      color="black"
+                    />
+                  </View>
+                )}
                 <Text style={[styles.qrCodeText, { color: theme.textSecondary }]}>
                   {selectedTicket.qrCode}
                 </Text>
@@ -521,8 +561,26 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 20,
   },
-  qrCodePlaceholder: {
+  qrCodeContainer: {
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrCodeImage: {
+    width: 200,
+    height: 200,
+  },
+  qrLoadingContainer: {
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrLoadingText: {
+    marginTop: 12,
+    fontSize: 14,
   },
   qrCodeText: {
     fontSize: 14,

@@ -82,7 +82,18 @@ export default function ProfileScreen() {
     );
   }
 
+  // Check if user is organizer or admin
+  const isOrganizerOrAdmin = user?.role === 'ORGANIZER' || user?.role === 'ADMIN';
+
   const menuItems = [
+    // Scanner option for organizers/admins
+    ...(isOrganizerOrAdmin ? [{
+      id: 'scanner',
+      icon: 'scan-outline',
+      label: 'Scan Tickets',
+      sublabel: 'Validate tickets at entry',
+      onPress: () => router.push('/scanner' as any),
+    }] : []),
     {
       id: 'tickets',
       icon: 'ticket-outline',

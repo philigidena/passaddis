@@ -73,6 +73,7 @@ export interface TicketType {
 export interface Ticket {
   id: string;
   qrCode: string;
+  qrCodeImage?: string; // Base64 data URL of the QR code image
   status: 'VALID' | 'USED' | 'CANCELLED' | 'EXPIRED';
   purchasedAt: string;
   event: Event;

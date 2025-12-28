@@ -25,6 +25,12 @@ export default function RootLayout() {
                   presentation: 'modal',
                 }}
               />
+              <Stack.Screen
+                name="scanner"
+                options={{
+                  presentation: 'fullScreenModal',
+                }}
+              />
             </Stack>
             <StatusBar style="auto" />
           </ThemeProvider>
