@@ -2,11 +2,17 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Body,
   UseGuards,
   Patch,
+  Param,
+  Req,
   BadRequestException,
+  Headers,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import {
   SendOtpDto,
@@ -14,6 +20,7 @@ import {
   RegisterDto,
   EmailRegisterDto,
   EmailLoginDto,
+  RefreshTokenDto,
 } from './dto/auth.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -27,32 +34,103 @@ export class AuthController {
     private prisma: PrismaService,
   ) {}
 
+  // Helper to extract client info
+  private getClientInfo(req: Request, userAgent?: string) {
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const device = userAgent || req.headers['user-agent'] || 'unknown';
+    return { ip: String(ip), device };
+  }
+
   // ============== OTP AUTHENTICATION ==============
 
   @Public()
   @Post('send-otp')
+  @Throttle({ default: { ttl: 60000, limit: 3 } }) // 3 OTP requests per minute
   async sendOtp(@Body() dto: SendOtpDto) {
     return this.authService.sendOtp(dto);
   }
 
   @Public()
   @Post('verify-otp')
-  async verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.authService.verifyOtp(dto);
+  @Throttle({ default: { ttl: 60000, limit: 5 } }) // 5 attempts per minute
+  async verifyOtp(
+    @Body() dto: VerifyOtpDto,
+    @Req() req: Request,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    const { ip, device } = this.getClientInfo(req, userAgent);
+    return this.authService.verifyOtp(dto, device, ip);
   }
 
   // ============== EMAIL/PASSWORD AUTHENTICATION ==============
 
   @Public()
   @Post('register')
-  async register(@Body() dto: EmailRegisterDto) {
-    return this.authService.registerWithEmail(dto);
+  @Throttle({ default: { ttl: 60000, limit: 5 } }) // 5 registrations per minute
+  async register(
+    @Body() dto: EmailRegisterDto,
+    @Req() req: Request,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    const { ip, device } = this.getClientInfo(req, userAgent);
+    return this.authService.registerWithEmail(dto, device, ip);
   }
 
   @Public()
   @Post('login')
-  async login(@Body() dto: EmailLoginDto) {
-    return this.authService.loginWithEmail(dto);
+  @Throttle({ default: { ttl: 60000, limit: 10 } }) // 10 login attempts per minute
+  async login(
+    @Body() dto: EmailLoginDto,
+    @Req() req: Request,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    const { ip, device } = this.getClientInfo(req, userAgent);
+    return this.authService.loginWithEmail(dto, device, ip);
+  }
+
+  // ============== REFRESH TOKEN MANAGEMENT ==============
+
+  @Public()
+  @Post('refresh')
+  async refreshToken(
+    @Body() dto: RefreshTokenDto,
+    @Req() req: Request,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    const { ip, device } = this.getClientInfo(req, userAgent);
+    return this.authService.refreshAccessToken(dto.refreshToken, device, ip);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  async logout(@Body() body: { refreshToken?: string }) {
+    if (body.refreshToken) {
+      await this.authService.revokeRefreshToken(body.refreshToken);
+    }
+    return { message: 'Logged out successfully' };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout-all')
+  async logoutAll(@CurrentUser('id') userId: string) {
+    await this.authService.revokeAllUserTokens(userId);
+    return { message: 'Logged out from all devices' };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('sessions')
+  async getSessions(@CurrentUser('id') userId: string) {
+    return this.authService.getActiveSessions(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('sessions/:sessionId')
+  async revokeSession(
+    @CurrentUser('id') userId: string,
+    @Param('sessionId') sessionId: string,
+  ) {
+    await this.authService.revokeSession(userId, sessionId);
+    return { message: 'Session revoked' };
   }
 
   // ============== PROFILE MANAGEMENT ==============
@@ -88,16 +166,37 @@ export class AuthController {
     return { hasPassword };
   }
 
-  // ============== BOOTSTRAP ADMIN (ONE-TIME USE) ==============
+  // ============== BOOTSTRAP ADMIN (ONE-TIME USE ONLY) ==============
 
   @Public()
   @Post('bootstrap-admin')
+  @Throttle({ default: { ttl: 60000, limit: 1 } }) // Only 1 attempt per minute
   async bootstrapAdmin(@Body() body: { email: string; secret: string }) {
+    // SECURITY: Only allow in development or if explicitly enabled
+    const allowBootstrap = process.env.ALLOW_ADMIN_BOOTSTRAP === 'true';
+    if (process.env.NODE_ENV === 'production' && !allowBootstrap) {
+      throw new BadRequestException('Admin bootstrap is disabled in production');
+    }
+
     // Secret key to prevent unauthorized access
-    const BOOTSTRAP_SECRET = process.env.BOOTSTRAP_ADMIN_SECRET || 'PassAddis2026!Bootstrap';
+    const BOOTSTRAP_SECRET = process.env.BOOTSTRAP_ADMIN_SECRET;
+    if (!BOOTSTRAP_SECRET) {
+      throw new BadRequestException('Bootstrap secret not configured');
+    }
 
     if (body.secret !== BOOTSTRAP_SECRET) {
       throw new BadRequestException('Invalid bootstrap secret');
+    }
+
+    // SECURITY: Only allow if NO admin exists yet
+    const existingAdmin = await this.prisma.user.findFirst({
+      where: { role: 'ADMIN' },
+    });
+
+    if (existingAdmin) {
+      throw new BadRequestException(
+        'An admin already exists. Use admin panel to create additional admins.',
+      );
     }
 
     // Find user by email
@@ -108,11 +207,6 @@ export class AuthController {
     if (!user) {
       throw new BadRequestException('User not found');
     }
-
-    // Check if there's already an admin
-    const existingAdmin = await this.prisma.user.findFirst({
-      where: { role: 'ADMIN' },
-    });
 
     // Update user to admin
     const updatedUser = await this.prisma.user.update({
@@ -126,10 +220,19 @@ export class AuthController {
       },
     });
 
+    // Log the admin creation
+    await this.authService.logAudit(
+      'ADMIN_BOOTSTRAP',
+      'User',
+      user.id,
+      user.id,
+      { role: 'USER' },
+      { role: 'ADMIN' },
+    );
+
     return {
-      message: 'User promoted to admin successfully',
+      message: 'First admin created successfully. Disable ALLOW_ADMIN_BOOTSTRAP in production.',
       user: updatedUser,
-      note: existingAdmin ? 'Note: There was already an existing admin' : 'This is the first admin',
     };
   }
 }

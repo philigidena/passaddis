@@ -3,15 +3,58 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PurchaseTicketsDto, ValidateTicketDto } from './dto/tickets.dto';
+import {
+  InitiateTransferDto,
+  ClaimTransferDto,
+  CancelTransferDto,
+} from './dto/transfer.dto';
 import { v4 as uuidv4 } from 'uuid';
 import * as QRCode from 'qrcode';
+import * as crypto from 'crypto';
+
+// Transfer expires after 48 hours
+const TRANSFER_EXPIRY_HOURS = 48;
+
+// Double-scan prevention window in milliseconds (5 seconds)
+const SCAN_COOLDOWN_MS = 5000;
 
 @Injectable()
 export class TicketsService {
-  constructor(private prisma: PrismaService) {}
+  // In-memory cache for recent scans to prevent double-scanning
+  private recentScans = new Map<string, number>();
+
+  constructor(private prisma: PrismaService) {
+    // Clean up old entries every minute
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, timestamp] of this.recentScans) {
+        if (now - timestamp > SCAN_COOLDOWN_MS * 2) {
+          this.recentScans.delete(key);
+        }
+      }
+    }, 60000);
+  }
+
+  // Check if ticket was recently scanned (double-scan prevention)
+  private isRecentlySscanned(qrCode: string): boolean {
+    const lastScan = this.recentScans.get(qrCode);
+    if (!lastScan) return false;
+    return Date.now() - lastScan < SCAN_COOLDOWN_MS;
+  }
+
+  // Record a scan
+  private recordScan(qrCode: string): void {
+    this.recentScans.set(qrCode, Date.now());
+  }
+
+  // Generate unique transfer code
+  private generateTransferCode(): string {
+    return crypto.randomBytes(6).toString('hex').toUpperCase();
+  }
 
   // Generate unique QR code
   private generateQrCode(): string {
@@ -194,6 +237,18 @@ export class TicketsService {
 
   // Validate ticket at entry (organizer)
   async validateTicket(dto: ValidateTicketDto) {
+    // Double-scan prevention: check if recently scanned
+    if (this.isRecentlySscanned(dto.qrCode)) {
+      return {
+        valid: false,
+        message: 'Ticket was just scanned. Please wait a moment.',
+        isDoubleScan: true,
+      };
+    }
+
+    // Record this scan attempt immediately
+    this.recordScan(dto.qrCode);
+
     const ticket = await this.prisma.ticket.findUnique({
       where: { qrCode: dto.qrCode },
       include: {
@@ -201,6 +256,7 @@ export class TicketsService {
           select: {
             id: true,
             title: true,
+            date: true,
             organizerId: true,
           },
         },
@@ -225,11 +281,38 @@ export class TicketsService {
       };
     }
 
+    // Check if ticket is for today's event (or within a reasonable window)
+    const eventDate = new Date(ticket.event.date);
+    const now = new Date();
+    const hoursDiff = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    // Allow check-in up to 24 hours before and 12 hours after event start
+    if (hoursDiff > 24) {
+      return {
+        valid: false,
+        message: 'Event has not started yet. Check-in opens 24 hours before.',
+        eventDate: ticket.event.date,
+      };
+    }
+    if (hoursDiff < -12) {
+      return {
+        valid: false,
+        message: 'Event has ended. This ticket is no longer valid.',
+        eventDate: ticket.event.date,
+      };
+    }
+
     if (ticket.status === 'USED') {
       return {
         valid: false,
         message: 'Ticket already used',
         usedAt: ticket.usedAt,
+        ticket: {
+          id: ticket.id,
+          event: ticket.event.title,
+          ticketType: ticket.ticketType.name,
+          attendee: ticket.user.name || ticket.user.phone,
+        },
       };
     }
 
@@ -240,24 +323,337 @@ export class TicketsService {
       };
     }
 
-    // Mark ticket as used
-    await this.prisma.ticket.update({
-      where: { id: ticket.id },
-      data: {
-        status: 'USED',
-        usedAt: new Date(),
+    if (ticket.status === 'TRANSFERRED') {
+      return {
+        valid: false,
+        message: 'Ticket has been transferred to another user',
+      };
+    }
+
+    if (ticket.status === 'EXPIRED') {
+      return {
+        valid: false,
+        message: 'Ticket has expired',
+      };
+    }
+
+    // Use transaction with optimistic locking to prevent race conditions
+    try {
+      const updatedTicket = await this.prisma.ticket.update({
+        where: {
+          id: ticket.id,
+          status: 'VALID', // Optimistic lock - only update if still VALID
+        },
+        data: {
+          status: 'USED',
+          usedAt: new Date(),
+        },
+      });
+
+      return {
+        valid: true,
+        message: 'Ticket validated successfully',
+        ticket: {
+          id: updatedTicket.id,
+          event: ticket.event.title,
+          ticketType: ticket.ticketType.name,
+          attendee: ticket.user.name || ticket.user.phone,
+        },
+      };
+    } catch (error) {
+      // If update failed due to status change, ticket was used by another scanner
+      return {
+        valid: false,
+        message: 'Ticket was just validated by another scanner',
+        isRaceCondition: true,
+      };
+    }
+  }
+
+  // ============== TICKET TRANSFER METHODS ==============
+
+  // Initiate a ticket transfer
+  async initiateTransfer(userId: string, dto: InitiateTransferDto) {
+    // Verify ticket ownership
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: dto.ticketId },
+      include: {
+        event: true,
+        ticketType: true,
       },
     });
 
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    if (ticket.userId !== userId) {
+      throw new ForbiddenException('You do not own this ticket');
+    }
+
+    // Check ticket status
+    if (ticket.status !== 'VALID') {
+      throw new BadRequestException(
+        `Cannot transfer ticket with status: ${ticket.status}`,
+      );
+    }
+
+    // Check if event hasn't passed
+    if (new Date(ticket.event.date) < new Date()) {
+      throw new BadRequestException('Cannot transfer ticket for past event');
+    }
+
+    // Check if there's already a pending transfer for this ticket
+    const existingTransfer = await this.prisma.ticketTransfer.findFirst({
+      where: {
+        ticketId: dto.ticketId,
+        status: 'PENDING',
+      },
+    });
+
+    if (existingTransfer) {
+      throw new ConflictException(
+        'This ticket already has a pending transfer. Cancel it first.',
+      );
+    }
+
+    // Must provide either phone or email
+    if (!dto.recipientPhone && !dto.recipientEmail) {
+      throw new BadRequestException(
+        'Please provide recipient phone or email',
+      );
+    }
+
+    // Create transfer
+    const transferCode = this.generateTransferCode();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + TRANSFER_EXPIRY_HOURS);
+
+    const transfer = await this.prisma.ticketTransfer.create({
+      data: {
+        ticketId: dto.ticketId,
+        fromUserId: userId,
+        recipientPhone: dto.recipientPhone,
+        recipientEmail: dto.recipientEmail,
+        message: dto.message,
+        transferCode,
+        expiresAt,
+      },
+    });
+
+    // TODO: Send notification to recipient (SMS/email)
+    // For now, return the code
+
     return {
-      valid: true,
-      message: 'Ticket validated successfully',
+      transfer: {
+        id: transfer.id,
+        transferCode: transfer.transferCode,
+        expiresAt: transfer.expiresAt,
+        recipientPhone: transfer.recipientPhone,
+        recipientEmail: transfer.recipientEmail,
+      },
       ticket: {
         id: ticket.id,
         event: ticket.event.title,
         ticketType: ticket.ticketType.name,
-        attendee: ticket.user.name || ticket.user.phone,
+      },
+      message: `Share code ${transferCode} with the recipient. Valid for ${TRANSFER_EXPIRY_HOURS} hours.`,
+    };
+  }
+
+  // Claim a transferred ticket
+  async claimTransfer(userId: string, dto: ClaimTransferDto) {
+    const transfer = await this.prisma.ticketTransfer.findUnique({
+      where: { transferCode: dto.transferCode.toUpperCase() },
+      include: {
+        ticket: {
+          include: {
+            event: true,
+            ticketType: true,
+          },
+        },
+      },
+    });
+
+    if (!transfer) {
+      throw new NotFoundException('Invalid transfer code');
+    }
+
+    // Check status
+    if (transfer.status === 'CLAIMED') {
+      throw new BadRequestException('This transfer has already been claimed');
+    }
+    if (transfer.status === 'CANCELLED') {
+      throw new BadRequestException('This transfer has been cancelled');
+    }
+    if (transfer.status === 'EXPIRED' || transfer.expiresAt < new Date()) {
+      throw new BadRequestException('This transfer has expired');
+    }
+
+    // Can't claim your own ticket
+    if (transfer.fromUserId === userId) {
+      throw new BadRequestException('You cannot claim your own transfer');
+    }
+
+    // Get the ticket
+    const ticket = transfer.ticket;
+    if (!ticket) {
+      throw new NotFoundException('Ticket no longer exists');
+    }
+
+    // Perform the transfer in a transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Generate new QR code for the new owner
+      const newQrCode = this.generateQrCode();
+
+      // Update ticket ownership
+      const updatedTicket = await tx.ticket.update({
+        where: { id: ticket.id },
+        data: {
+          userId,
+          qrCode: newQrCode,
+          status: 'VALID',
+        },
+        include: {
+          event: true,
+          ticketType: true,
+        },
+      });
+
+      // Mark transfer as claimed
+      await tx.ticketTransfer.update({
+        where: { id: transfer.id },
+        data: {
+          status: 'CLAIMED',
+          toUserId: userId,
+          claimedAt: new Date(),
+        },
+      });
+
+      return updatedTicket;
+    });
+
+    // Generate new QR code image
+    const qrCodeDataUrl = await QRCode.toDataURL(result.qrCode, {
+      width: 300,
+      margin: 2,
+    });
+
+    return {
+      success: true,
+      message: 'Ticket claimed successfully',
+      ticket: {
+        id: result.id,
+        qrCode: result.qrCode,
+        qrCodeImage: qrCodeDataUrl,
+        event: result.event.title,
+        eventDate: result.event.date,
+        venue: result.event.venue,
+        ticketType: result.ticketType.name,
       },
     };
+  }
+
+  // Cancel a pending transfer
+  async cancelTransfer(userId: string, dto: CancelTransferDto) {
+    const transfer = await this.prisma.ticketTransfer.findUnique({
+      where: { id: dto.transferId },
+    });
+
+    if (!transfer) {
+      throw new NotFoundException('Transfer not found');
+    }
+
+    if (transfer.fromUserId !== userId) {
+      throw new ForbiddenException('You cannot cancel this transfer');
+    }
+
+    if (transfer.status !== 'PENDING') {
+      throw new BadRequestException(
+        `Cannot cancel transfer with status: ${transfer.status}`,
+      );
+    }
+
+    await this.prisma.ticketTransfer.update({
+      where: { id: dto.transferId },
+      data: { status: 'CANCELLED' },
+    });
+
+    return { message: 'Transfer cancelled successfully' };
+  }
+
+  // Get pending transfers for a user (outgoing)
+  async getPendingTransfers(userId: string) {
+    const transfers = await this.prisma.ticketTransfer.findMany({
+      where: {
+        fromUserId: userId,
+        status: 'PENDING',
+      },
+      include: {
+        ticket: {
+          include: {
+            event: {
+              select: {
+                id: true,
+                title: true,
+                date: true,
+                venue: true,
+              },
+            },
+            ticketType: {
+              select: { name: true },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return transfers.map((t) => ({
+      id: t.id,
+      transferCode: t.transferCode,
+      recipientPhone: t.recipientPhone,
+      recipientEmail: t.recipientEmail,
+      expiresAt: t.expiresAt,
+      createdAt: t.createdAt,
+      ticket: {
+        id: t.ticket?.id,
+        event: t.ticket?.event?.title,
+        eventDate: t.ticket?.event?.date,
+        venue: t.ticket?.event?.venue,
+        ticketType: t.ticket?.ticketType?.name,
+      },
+    }));
+  }
+
+  // Get transfer history for a user
+  async getTransferHistory(userId: string) {
+    const transfers = await this.prisma.ticketTransfer.findMany({
+      where: {
+        OR: [{ fromUserId: userId }, { toUserId: userId }],
+      },
+      include: {
+        ticket: {
+          include: {
+            event: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return transfers.map((t) => ({
+      id: t.id,
+      direction: t.fromUserId === userId ? 'sent' : 'received',
+      status: t.status,
+      eventTitle: t.ticket?.event?.title,
+      createdAt: t.createdAt,
+      claimedAt: t.claimedAt,
+    }));
   }
 }

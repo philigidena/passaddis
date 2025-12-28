@@ -3,8 +3,10 @@ import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AfroSmsProvider } from './providers/afro-sms.provider';
 import {
@@ -16,6 +18,13 @@ import {
   EmailLoginDto,
 } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+
+// Constants for security
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MINUTES = 15;
+const REFRESH_TOKEN_EXPIRY_DAYS = 30;
+const ACCESS_TOKEN_EXPIRY = '15m'; // Short-lived access tokens
 
 @Injectable()
 export class AuthService {
@@ -23,11 +32,131 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private smsProvider: AfroSmsProvider,
+    private configService: ConfigService,
   ) {}
 
   // Generate a 6-digit OTP
   private generateOtp(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  // Generate secure refresh token
+  private generateRefreshToken(): string {
+    return crypto.randomBytes(64).toString('hex');
+  }
+
+  // Create refresh token in database
+  private async createRefreshToken(
+    userId: string,
+    deviceInfo?: string,
+    ipAddress?: string,
+  ): Promise<string> {
+    const token = this.generateRefreshToken();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
+
+    await this.prisma.refreshToken.create({
+      data: {
+        token,
+        userId,
+        expiresAt,
+        deviceInfo,
+        ipAddress,
+      },
+    });
+
+    return token;
+  }
+
+  // Generate tokens (access + refresh)
+  private async generateTokens(
+    user: { id: string; phone: string; email?: string | null; role: string },
+    deviceInfo?: string,
+    ipAddress?: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    const payload = { sub: user.id, phone: user.phone, email: user.email, role: user.role };
+    const accessToken = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_EXPIRY });
+    const refreshToken = await this.createRefreshToken(user.id, deviceInfo, ipAddress);
+
+    return { accessToken, refreshToken };
+  }
+
+  // Check if user is locked out
+  private async checkAccountLockout(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { lockedUntil: true, failedLoginAttempts: true },
+    });
+
+    if (user?.lockedUntil && user.lockedUntil > new Date()) {
+      const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+      throw new ForbiddenException(
+        `Account locked. Try again in ${minutesLeft} minutes.`,
+      );
+    }
+  }
+
+  // Record failed login attempt
+  private async recordFailedLogin(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { failedLoginAttempts: true },
+    });
+
+    const attempts = (user?.failedLoginAttempts || 0) + 1;
+    const lockedUntil = attempts >= MAX_LOGIN_ATTEMPTS
+      ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000)
+      : null;
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        failedLoginAttempts: attempts,
+        lockedUntil,
+      },
+    });
+
+    if (lockedUntil) {
+      throw new ForbiddenException(
+        `Too many failed attempts. Account locked for ${LOCKOUT_DURATION_MINUTES} minutes.`,
+      );
+    }
+  }
+
+  // Clear failed login attempts on successful login
+  private async clearFailedLogins(userId: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+  }
+
+  // Log audit event
+  async logAudit(
+    action: string,
+    entity: string,
+    entityId?: string,
+    userId?: string,
+    oldValue?: any,
+    newValue?: any,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    await this.prisma.auditLog.create({
+      data: {
+        action,
+        entity,
+        entityId,
+        userId,
+        oldValue,
+        newValue,
+        ipAddress,
+        userAgent,
+      },
+    });
   }
 
   // Send OTP to phone (stub - integrate with Afro Message later)
@@ -75,7 +204,11 @@ export class AuthService {
   }
 
   // Verify OTP and login/register user
-  async verifyOtp(dto: VerifyOtpDto): Promise<AuthResponseDto> {
+  async verifyOtp(
+    dto: VerifyOtpDto,
+    deviceInfo?: string,
+    ipAddress?: string,
+  ): Promise<AuthResponseDto> {
     const { phone, code } = dto;
 
     // Find valid OTP
@@ -100,6 +233,7 @@ export class AuthService {
 
     // Find or create user
     let user = await this.prisma.user.findUnique({ where: { phone } });
+    const isNewUser = !user;
 
     if (!user) {
       user = await this.prisma.user.create({
@@ -109,19 +243,42 @@ export class AuthService {
         },
       });
     } else {
-      // Mark user as verified
+      // Check lockout before proceeding
+      await this.checkAccountLockout(user.id);
+
+      // Mark user as verified and clear any failed attempts
       user = await this.prisma.user.update({
         where: { id: user.id },
-        data: { isVerified: true },
+        data: {
+          isVerified: true,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
       });
     }
 
-    // Generate JWT
-    const payload = { sub: user.id, phone: user.phone, role: user.role };
-    const accessToken = this.jwtService.sign(payload);
+    // Generate tokens
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user,
+      deviceInfo,
+      ipAddress,
+    );
+
+    // Log the login/register event
+    await this.logAudit(
+      isNewUser ? 'REGISTER_OTP' : 'LOGIN_OTP',
+      'User',
+      user.id,
+      user.id,
+      null,
+      null,
+      ipAddress,
+      deviceInfo,
+    );
 
     return {
       accessToken,
+      refreshToken,
       user: {
         id: user.id,
         phone: user.phone,
@@ -184,7 +341,11 @@ export class AuthService {
   // ============== EMAIL/PASSWORD AUTHENTICATION ==============
 
   // Register with email and password
-  async registerWithEmail(dto: EmailRegisterDto): Promise<AuthResponseDto> {
+  async registerWithEmail(
+    dto: EmailRegisterDto,
+    deviceInfo?: string,
+    ipAddress?: string,
+  ): Promise<AuthResponseDto> {
     const { email, password, name, phone } = dto;
 
     // Check if email already exists
@@ -216,17 +377,33 @@ export class AuthService {
         email,
         passwordHash,
         name,
-        phone: phone || `email_${Date.now()}`, // Temporary phone for users registering with email
-        isVerified: true, // Email users are verified by default (can add email verification later)
+        phone: phone || `email_${Date.now()}`,
+        isVerified: true,
       },
     });
 
-    // Generate JWT
-    const payload = { sub: user.id, phone: user.phone, email: user.email, role: user.role };
-    const accessToken = this.jwtService.sign(payload);
+    // Generate tokens
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user,
+      deviceInfo,
+      ipAddress,
+    );
+
+    // Log registration
+    await this.logAudit(
+      'REGISTER_EMAIL',
+      'User',
+      user.id,
+      user.id,
+      null,
+      null,
+      ipAddress,
+      deviceInfo,
+    );
 
     return {
       accessToken,
+      refreshToken,
       user: {
         id: user.id,
         phone: user.phone,
@@ -238,7 +415,11 @@ export class AuthService {
   }
 
   // Login with email and password
-  async loginWithEmail(dto: EmailLoginDto): Promise<AuthResponseDto> {
+  async loginWithEmail(
+    dto: EmailLoginDto,
+    deviceInfo?: string,
+    ipAddress?: string,
+  ): Promise<AuthResponseDto> {
     const { email, password } = dto;
 
     // Find user by email
@@ -250,19 +431,43 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    // Check if account is locked
+    await this.checkAccountLockout(user.id);
+
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
     if (!isPasswordValid) {
+      // Record failed attempt
+      await this.recordFailedLogin(user.id);
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    // Generate JWT
-    const payload = { sub: user.id, phone: user.phone, email: user.email, role: user.role };
-    const accessToken = this.jwtService.sign(payload);
+    // Clear failed login attempts on successful login
+    await this.clearFailedLogins(user.id);
+
+    // Generate tokens
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user,
+      deviceInfo,
+      ipAddress,
+    );
+
+    // Log login
+    await this.logAudit(
+      'LOGIN_EMAIL',
+      'User',
+      user.id,
+      user.id,
+      null,
+      null,
+      ipAddress,
+      deviceInfo,
+    );
 
     return {
       accessToken,
+      refreshToken,
       user: {
         id: user.id,
         phone: user.phone,
@@ -271,6 +476,100 @@ export class AuthService {
         role: user.role,
       },
     };
+  }
+
+  // ============== REFRESH TOKEN MANAGEMENT ==============
+
+  // Refresh access token using refresh token
+  async refreshAccessToken(
+    refreshTokenValue: string,
+    deviceInfo?: string,
+    ipAddress?: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    // Find the refresh token
+    const tokenRecord = await this.prisma.refreshToken.findUnique({
+      where: { token: refreshTokenValue },
+      include: { user: true },
+    });
+
+    if (!tokenRecord) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // Check if token is revoked
+    if (tokenRecord.revoked) {
+      // Potential token reuse attack - revoke all user tokens
+      await this.revokeAllUserTokens(tokenRecord.userId);
+      throw new UnauthorizedException('Refresh token has been revoked');
+    }
+
+    // Check if token is expired
+    if (tokenRecord.expiresAt < new Date()) {
+      throw new UnauthorizedException('Refresh token has expired');
+    }
+
+    // Check if user account is locked
+    await this.checkAccountLockout(tokenRecord.userId);
+
+    // Revoke the old refresh token (rotation)
+    await this.prisma.refreshToken.update({
+      where: { id: tokenRecord.id },
+      data: { revoked: true, revokedAt: new Date() },
+    });
+
+    // Generate new tokens
+    const user = tokenRecord.user;
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user,
+      deviceInfo,
+      ipAddress,
+    );
+
+    return { accessToken, refreshToken };
+  }
+
+  // Revoke a specific refresh token (logout)
+  async revokeRefreshToken(refreshTokenValue: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { token: refreshTokenValue },
+      data: { revoked: true, revokedAt: new Date() },
+    });
+  }
+
+  // Revoke all refresh tokens for a user (logout all devices)
+  async revokeAllUserTokens(userId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revoked: false },
+      data: { revoked: true, revokedAt: new Date() },
+    });
+  }
+
+  // Get active sessions for a user
+  async getActiveSessions(userId: string) {
+    const tokens = await this.prisma.refreshToken.findMany({
+      where: {
+        userId,
+        revoked: false,
+        expiresAt: { gt: new Date() },
+      },
+      select: {
+        id: true,
+        deviceInfo: true,
+        ipAddress: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return tokens;
+  }
+
+  // Revoke a specific session
+  async revokeSession(userId: string, sessionId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { id: sessionId, userId },
+      data: { revoked: true, revokedAt: new Date() },
+    });
   }
 
   // Add password to existing user (for users who registered via OTP)

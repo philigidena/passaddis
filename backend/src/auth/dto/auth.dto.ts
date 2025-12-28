@@ -94,6 +94,7 @@ export class ResetPasswordDto {
 
 export class AuthResponseDto {
   accessToken: string;
+  refreshToken?: string;
   user: {
     id: string;
     phone: string | null;
@@ -101,4 +102,10 @@ export class AuthResponseDto {
     email: string | null;
     role: string;
   };
+}
+
+export class RefreshTokenDto {
+  @IsString()
+  @IsNotEmpty()
+  refreshToken: string;
 }

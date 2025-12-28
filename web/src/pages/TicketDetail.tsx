@@ -1,14 +1,43 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, ArrowLeft, Loader2, Download } from 'lucide-react';
+import { Calendar, MapPin, Clock, ArrowLeft, Loader2, Download, Send, X } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/Button';
 import { useTicket } from '@/hooks/useTickets';
+import { ticketsApi } from '@/lib/api';
 import { QRCodeSVG } from 'qrcode.react';
 import clsx from 'clsx';
 
 export function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { ticket, isLoading, error } = useTicket(id);
+  const { ticket, isLoading, error, refetch } = useTicket(id);
+
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [recipientPhone, setRecipientPhone] = useState('');
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferError, setTransferError] = useState('');
+  const [transferSuccess, setTransferSuccess] = useState<{ code: string; expiresAt: string } | null>(null);
+
+  const handleTransfer = async () => {
+    if (!ticket || !recipientPhone.trim()) return;
+
+    setTransferLoading(true);
+    setTransferError('');
+
+    const result = await ticketsApi.initiateTransfer(ticket.id, recipientPhone.trim());
+
+    if (result.error) {
+      setTransferError(result.error);
+    } else if (result.data) {
+      setTransferSuccess({
+        code: result.data.transfer.transferCode,
+        expiresAt: result.data.transfer.expiresAt,
+      });
+      refetch();
+    }
+
+    setTransferLoading(false);
+  };
 
   if (isLoading) {
     return (
@@ -186,13 +215,21 @@ export function TicketDetailPage() {
 
             {/* Footer */}
             {ticket.status === 'VALID' && (
-              <div className="p-6 pt-0">
+              <div className="p-6 pt-0 space-y-3">
                 <Button
                   variant="outline"
                   className="w-full"
                   leftIcon={<Download className="w-4 h-4" />}
                 >
                   Download Ticket
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  leftIcon={<Send className="w-4 h-4" />}
+                  onClick={() => setShowTransferModal(true)}
+                >
+                  Transfer Ticket
                 </Button>
               </div>
             )}
@@ -209,6 +246,113 @@ export function TicketDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Transfer Modal */}
+      {showTransferModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-dark-card rounded-2xl w-full max-w-md border border-white/10">
+            <div className="flex items-center justify-between p-6 border-b border-white/10">
+              <h3 className="text-lg font-semibold text-white">Transfer Ticket</h3>
+              <button
+                onClick={() => {
+                  setShowTransferModal(false);
+                  setTransferSuccess(null);
+                  setRecipientPhone('');
+                  setTransferError('');
+                }}
+                className="text-white/60 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {transferSuccess ? (
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-success/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Send className="w-8 h-8 text-success" />
+                  </div>
+                  <h4 className="text-xl font-semibold text-white mb-2">Transfer Initiated!</h4>
+                  <p className="text-white/60 mb-4">
+                    Share this code with the recipient:
+                  </p>
+                  <div className="bg-dark-bg rounded-xl p-4 mb-4">
+                    <p className="text-2xl font-mono font-bold text-primary tracking-wider">
+                      {transferSuccess.code}
+                    </p>
+                  </div>
+                  <p className="text-white/40 text-sm">
+                    This code expires on{' '}
+                    {new Date(transferSuccess.expiresAt).toLocaleString()}
+                  </p>
+                  <Button
+                    className="w-full mt-6"
+                    onClick={() => {
+                      navigator.clipboard.writeText(transferSuccess.code);
+                    }}
+                  >
+                    Copy Code
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-white/60 mb-4">
+                    Enter the phone number of the person you want to transfer this ticket to.
+                    They will receive a transfer code to claim the ticket.
+                  </p>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-white/60 mb-2">
+                      Recipient Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="e.g., 0912345678"
+                      value={recipientPhone}
+                      onChange={(e) => setRecipientPhone(e.target.value)}
+                      className="w-full px-4 py-3 bg-dark-bg border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  {transferError && (
+                    <div className="bg-danger/10 border border-danger/30 rounded-lg p-3 mb-4">
+                      <p className="text-danger text-sm">{transferError}</p>
+                    </div>
+                  )}
+
+                  <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 mb-6">
+                    <p className="text-warning text-sm">
+                      Once transferred, you will no longer have access to this ticket.
+                      The transfer can be cancelled until the recipient claims it.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setShowTransferModal(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      onClick={handleTransfer}
+                      disabled={!recipientPhone.trim() || transferLoading}
+                    >
+                      {transferLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        'Transfer'
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

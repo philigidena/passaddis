@@ -9,6 +9,7 @@ import { AfroSmsProvider } from './providers/afro-sms.provider';
 
 @Module({
   imports: [
+    ConfigModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

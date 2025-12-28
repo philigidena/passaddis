@@ -12,6 +12,7 @@ import { AdminEvents } from '@/pages/admin/AdminEvents';
 import { AdminUsers } from '@/pages/admin/AdminUsers';
 import { AdminOrganizers } from '@/pages/admin/AdminOrganizers';
 import { AdminShop } from '@/pages/admin/AdminShop';
+import { AdminPromos } from '@/pages/admin/AdminPromos';
 import { OrganizerDashboard } from '@/pages/organizer/OrganizerDashboard';
 import { OrganizerEvents } from '@/pages/organizer/OrganizerEvents';
 import { OrganizerWallet } from '@/pages/organizer/OrganizerWallet';
@@ -126,6 +127,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['ADMIN']}>
             <AdminShop />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/promos"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <AdminPromos />
           </ProtectedRoute>
         }
       />

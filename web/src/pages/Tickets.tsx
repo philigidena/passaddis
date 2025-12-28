@@ -1,15 +1,41 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Ticket, QrCode, Loader2, ArrowRight } from 'lucide-react';
+import { Calendar, MapPin, Ticket, QrCode, Loader2, ArrowRight, Gift, X } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/Button';
 import { useTickets } from '@/hooks/useTickets';
 import { useAuth } from '@/context/AuthContext';
+import { ticketsApi } from '@/lib/api';
 import type { Ticket as TicketType } from '@/types';
 import clsx from 'clsx';
 
 export function TicketsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { tickets, isLoading, error, refetch } = useTickets();
+
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [claimCode, setClaimCode] = useState('');
+  const [claimLoading, setClaimLoading] = useState(false);
+  const [claimError, setClaimError] = useState('');
+  const [claimSuccess, setClaimSuccess] = useState(false);
+
+  const handleClaimTicket = async () => {
+    if (!claimCode.trim()) return;
+
+    setClaimLoading(true);
+    setClaimError('');
+
+    const result = await ticketsApi.claimTransfer(claimCode.trim().toUpperCase());
+
+    if (result.error) {
+      setClaimError(result.error);
+    } else if (result.data) {
+      setClaimSuccess(true);
+      refetch();
+    }
+
+    setClaimLoading(false);
+  };
 
   if (authLoading) {
     return (
@@ -52,10 +78,21 @@ export function TicketsPage() {
         {/* Header */}
         <div className="bg-dark-card border-b border-white/5">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">My Tickets</h1>
-            <p className="text-white/60">
-              View and manage your purchased tickets
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">My Tickets</h1>
+                <p className="text-white/60">
+                  View and manage your purchased tickets
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                leftIcon={<Gift className="w-4 h-4" />}
+                onClick={() => setShowClaimModal(true)}
+              >
+                Claim Ticket
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -135,6 +172,99 @@ export function TicketsPage() {
           )}
         </div>
       </div>
+
+      {/* Claim Ticket Modal */}
+      {showClaimModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-dark-card rounded-2xl w-full max-w-md border border-white/10">
+            <div className="flex items-center justify-between p-6 border-b border-white/10">
+              <h3 className="text-lg font-semibold text-white">Claim Ticket</h3>
+              <button
+                onClick={() => {
+                  setShowClaimModal(false);
+                  setClaimSuccess(false);
+                  setClaimCode('');
+                  setClaimError('');
+                }}
+                className="text-white/60 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {claimSuccess ? (
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-success/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Gift className="w-8 h-8 text-success" />
+                  </div>
+                  <h4 className="text-xl font-semibold text-white mb-2">Ticket Claimed!</h4>
+                  <p className="text-white/60 mb-6">
+                    The ticket has been added to your account.
+                  </p>
+                  <Button
+                    className="w-full"
+                    onClick={() => {
+                      setShowClaimModal(false);
+                      setClaimSuccess(false);
+                      setClaimCode('');
+                    }}
+                  >
+                    Done
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-white/60 mb-4">
+                    Enter the transfer code you received to claim your ticket.
+                  </p>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-white/60 mb-2">
+                      Transfer Code
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., ABCD1234"
+                      value={claimCode}
+                      onChange={(e) => setClaimCode(e.target.value.toUpperCase())}
+                      className="w-full px-4 py-3 bg-dark-bg border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-primary text-center font-mono text-xl tracking-wider"
+                      maxLength={8}
+                    />
+                  </div>
+
+                  {claimError && (
+                    <div className="bg-danger/10 border border-danger/30 rounded-lg p-3 mb-4">
+                      <p className="text-danger text-sm">{claimError}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setShowClaimModal(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      onClick={handleClaimTicket}
+                      disabled={!claimCode.trim() || claimLoading}
+                    >
+                      {claimLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        'Claim'
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

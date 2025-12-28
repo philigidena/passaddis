@@ -30,6 +30,9 @@ const api: AxiosInstance = axios.create({
 
 // Token management
 let authToken: string | null = localStorage.getItem('passaddis_token');
+let refreshToken: string | null = localStorage.getItem('passaddis_refresh_token');
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
 
 export const setAuthToken = (token: string | null) => {
   authToken = token;
@@ -42,23 +45,103 @@ export const setAuthToken = (token: string | null) => {
   }
 };
 
+export const setRefreshToken = (token: string | null) => {
+  refreshToken = token;
+  if (token) {
+    localStorage.setItem('passaddis_refresh_token', token);
+  } else {
+    localStorage.removeItem('passaddis_refresh_token');
+  }
+};
+
 export const getAuthToken = () => authToken;
+export const getRefreshToken = () => refreshToken;
+
+export const clearAllTokens = () => {
+  setAuthToken(null);
+  setRefreshToken(null);
+  localStorage.removeItem('passaddis_user');
+};
 
 // Initialize token from storage
 if (authToken) {
   api.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
 }
 
-// Response interceptor for error handling
+// Subscribe to token refresh
+const subscribeToTokenRefresh = (callback: (token: string) => void) => {
+  refreshSubscribers.push(callback);
+};
+
+// Notify all subscribers with new token
+const onTokenRefreshed = (token: string) => {
+  refreshSubscribers.forEach((callback) => callback(token));
+  refreshSubscribers = [];
+};
+
+// Refresh access token using refresh token
+const refreshAccessToken = async (): Promise<string | null> => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+      refreshToken,
+    });
+    const { accessToken, refreshToken: newRefreshToken } = response.data;
+    setAuthToken(accessToken);
+    if (newRefreshToken) {
+      setRefreshToken(newRefreshToken);
+    }
+    return accessToken;
+  } catch {
+    clearAllTokens();
+    return null;
+  }
+};
+
+// Response interceptor for error handling and token refresh
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
+    const originalRequest = error.config as any;
+
+    // If 401 and we have a refresh token and haven't retried
+    if (
+      error.response?.status === 401 &&
+      refreshToken &&
+      !originalRequest._retry
+    ) {
+      originalRequest._retry = true;
+
+      if (!isRefreshing) {
+        isRefreshing = true;
+        const newToken = await refreshAccessToken();
+        isRefreshing = false;
+
+        if (newToken) {
+          onTokenRefreshed(newToken);
+          originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+          return api(originalRequest);
+        } else {
+          // Refresh failed, redirect to login
+          window.location.href = '/signin';
+          return Promise.reject(error);
+        }
+      }
+
+      // Wait for token refresh
+      return new Promise((resolve) => {
+        subscribeToTokenRefresh((token: string) => {
+          originalRequest.headers['Authorization'] = `Bearer ${token}`;
+          resolve(api(originalRequest));
+        });
+      });
+    }
+
+    // No refresh token or other error
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      setAuthToken(null);
-      localStorage.removeItem('passaddis_user');
+      clearAllTokens();
       window.location.href = '/signin';
     }
+
     return Promise.reject(error);
   }
 );
@@ -100,6 +183,33 @@ export const authApi = {
   hasPassword: () => handleResponse<{ hasPassword: boolean }>(api.get('/auth/has-password')),
 
   getMe: () => handleResponse<User>(api.get('/auth/me')),
+
+  // Session management
+  refreshToken: (token: string) =>
+    handleResponse<{ accessToken: string; refreshToken?: string }>(
+      api.post('/auth/refresh', { refreshToken: token })
+    ),
+
+  logout: (refreshTokenValue?: string) =>
+    handleResponse<{ message: string }>(
+      api.post('/auth/logout', { refreshToken: refreshTokenValue })
+    ),
+
+  logoutAll: () => handleResponse<{ message: string }>(api.post('/auth/logout-all')),
+
+  getSessions: () =>
+    handleResponse<
+      Array<{
+        id: string;
+        deviceInfo: string;
+        ipAddress: string;
+        createdAt: string;
+        current: boolean;
+      }>
+    >(api.get('/auth/sessions')),
+
+  revokeSession: (sessionId: string) =>
+    handleResponse<{ message: string }>(api.delete(`/auth/sessions/${sessionId}`)),
 };
 
 // ============== EVENTS API ==============
@@ -157,6 +267,30 @@ export const ticketsApi = {
     handleResponse<{ valid: boolean; message: string; ticket?: Ticket }>(
       api.post('/tickets/validate', { qrCode })
     ),
+
+  // Ticket Transfer
+  initiateTransfer: (ticketId: string, recipientPhone: string) =>
+    handleResponse<{ transfer: any; message: string }>(
+      api.post('/tickets/transfer/initiate', { ticketId, recipientPhone })
+    ),
+
+  claimTransfer: (transferCode: string) =>
+    handleResponse<{ ticket: Ticket; message: string }>(
+      api.post('/tickets/transfer/claim', { transferCode })
+    ),
+
+  cancelTransfer: (transferId: string) =>
+    handleResponse<{ message: string }>(
+      api.delete('/tickets/transfer/cancel', { data: { transferId } })
+    ),
+
+  getPendingTransfers: () =>
+    handleResponse<{ outgoing: any[]; incoming: any[] }>(
+      api.get('/tickets/transfer/pending')
+    ),
+
+  getTransferHistory: () =>
+    handleResponse<any[]>(api.get('/tickets/transfer/history')),
 };
 
 // ============== PAYMENTS API ==============
@@ -197,6 +331,27 @@ export const shopApi = {
     handleResponse<{ valid: boolean; message: string; order?: ShopOrder }>(
       api.post('/shop/validate-pickup', { qrCode })
     ),
+};
+
+// ============== WAITLIST API ==============
+export const waitlistApi = {
+  join: (eventId: string, ticketTypeId?: string) =>
+    handleResponse<{ waitlist: any; position: number; message: string }>(
+      api.post('/waitlist/join', { eventId, ticketTypeId })
+    ),
+
+  leave: (eventId: string) =>
+    handleResponse<{ message: string }>(
+      api.delete('/waitlist/leave', { data: { eventId } })
+    ),
+
+  getPosition: (eventId: string) =>
+    handleResponse<{ position: number; totalWaiting: number } | null>(
+      api.get(`/waitlist/position/${eventId}`)
+    ),
+
+  getMyWaitlists: () =>
+    handleResponse<any[]>(api.get('/waitlist/my-waitlists')),
 };
 
 // ============== ADMIN API ==============
@@ -261,6 +416,40 @@ export const adminApi = {
 
   deletePickupLocation: (id: string) =>
     handleResponse<void>(api.delete(`/admin/pickup-locations/${id}`)),
+
+  // Promo Codes
+  getPromoCodes: () => handleResponse<any[]>(api.get('/promo')),
+
+  createPromoCode: (data: {
+    code: string;
+    discountType: 'PERCENTAGE' | 'FIXED';
+    discountValue: number;
+    description?: string;
+    maxUses?: number;
+    minPurchase?: number;
+    maxDiscount?: number;
+    eventId?: string;
+    validFrom?: string;
+    validUntil?: string;
+    isActive?: boolean;
+  }) => handleResponse<any>(api.post('/promo', data)),
+
+  updatePromoCode: (id: string, data: Partial<{
+    discountType: 'PERCENTAGE' | 'FIXED';
+    discountValue: number;
+    description: string;
+    maxUses: number;
+    minPurchase: number;
+    maxDiscount: number;
+    eventId: string;
+    validFrom: string;
+    validUntil: string;
+    isActive: boolean;
+  }>) => handleResponse<any>(api.patch(`/promo/${id}`, data)),
+
+  deletePromoCode: (id: string) => handleResponse<void>(api.delete(`/promo/${id}`)),
+
+  getPromoCodeStats: (id: string) => handleResponse<any>(api.get(`/promo/${id}/stats`)),
 };
 
 // ============== ORGANIZER API ==============

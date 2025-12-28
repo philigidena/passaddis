@@ -17,9 +17,17 @@ import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/Button';
 import { useEvent } from '@/hooks/useEvents';
 import { useAuth } from '@/context/AuthContext';
-import { ticketsApi, paymentsApi } from '@/lib/api';
+import { ticketsApi, paymentsApi, waitlistApi } from '@/lib/api';
 import type { TicketType } from '@/types';
 import clsx from 'clsx';
+
+interface WaitlistStatus {
+  [ticketTypeId: string]: {
+    joined: boolean;
+    position?: number;
+    loading?: boolean;
+  };
+}
 
 interface TicketSelection {
   [ticketTypeId: string]: number;
@@ -34,6 +42,37 @@ export function EventDetailPage() {
   const [ticketSelection, setTicketSelection] = useState<TicketSelection>({});
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [waitlistStatus, setWaitlistStatus] = useState<WaitlistStatus>({});
+
+  const handleJoinWaitlist = async (ticketTypeId: string) => {
+    if (!isAuthenticated) {
+      navigate('/signin');
+      return;
+    }
+
+    setWaitlistStatus((prev) => ({
+      ...prev,
+      [ticketTypeId]: { ...prev[ticketTypeId], loading: true },
+    }));
+
+    const result = await waitlistApi.join(id!, ticketTypeId);
+
+    if (result.data) {
+      setWaitlistStatus((prev) => ({
+        ...prev,
+        [ticketTypeId]: {
+          joined: true,
+          position: result.data?.position,
+          loading: false,
+        },
+      }));
+    } else {
+      setWaitlistStatus((prev) => ({
+        ...prev,
+        [ticketTypeId]: { ...prev[ticketTypeId], loading: false },
+      }));
+    }
+  };
 
   const updateQuantity = (ticketTypeId: string, delta: number, max: number) => {
     setTicketSelection((prev) => {
@@ -268,6 +307,8 @@ export function EventDetailPage() {
                       updateQuantity(ticketType.id, 1, Math.min(ticketType.available, ticketType.maxPerOrder))
                     }
                     onDecrease={() => updateQuantity(ticketType.id, -1, ticketType.maxPerOrder)}
+                    waitlistStatus={waitlistStatus[ticketType.id]}
+                    onJoinWaitlist={() => handleJoinWaitlist(ticketType.id)}
                   />
                 ))}
               </div>
@@ -327,11 +368,15 @@ function TicketTypeRow({
   quantity,
   onIncrease,
   onDecrease,
+  waitlistStatus,
+  onJoinWaitlist,
 }: {
   ticketType: TicketType;
   quantity: number;
   onIncrease: () => void;
   onDecrease: () => void;
+  waitlistStatus?: { joined: boolean; position?: number; loading?: boolean };
+  onJoinWaitlist: () => void;
 }) {
   const isAvailable = ticketType.available > 0;
   const isSoldOut = ticketType.available === 0;
@@ -342,6 +387,8 @@ function TicketTypeRow({
         'p-4 rounded-xl border transition-colors',
         quantity > 0
           ? 'bg-primary/5 border-primary/30'
+          : waitlistStatus?.joined
+          ? 'bg-warning/5 border-warning/30'
           : 'bg-white/5 border-white/10 hover:border-white/20'
       )}
     >
@@ -360,13 +407,19 @@ function TicketTypeRow({
       <div className="flex items-center justify-between">
         <p className="text-white/40 text-sm">
           {isSoldOut ? (
-            <span className="text-danger">Sold Out</span>
+            waitlistStatus?.joined ? (
+              <span className="text-warning">
+                Position #{waitlistStatus.position} on waitlist
+              </span>
+            ) : (
+              <span className="text-danger">Sold Out</span>
+            )
           ) : (
             `${ticketType.available} available`
           )}
         </p>
 
-        {isAvailable && (
+        {isAvailable ? (
           <div className="flex items-center gap-3">
             <button
               onClick={onDecrease}
@@ -384,6 +437,20 @@ function TicketTypeRow({
               <Plus className="w-4 h-4" />
             </button>
           </div>
+        ) : (
+          !waitlistStatus?.joined && (
+            <button
+              onClick={onJoinWaitlist}
+              disabled={waitlistStatus?.loading}
+              className="px-3 py-1.5 text-sm font-medium bg-warning/10 text-warning border border-warning/30 rounded-lg hover:bg-warning/20 disabled:opacity-50 transition-colors"
+            >
+              {waitlistStatus?.loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                'Join Waitlist'
+              )}
+            </button>
+          )
         )}
       </div>
     </div>
