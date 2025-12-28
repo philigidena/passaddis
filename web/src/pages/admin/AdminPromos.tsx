@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { api } from '@/lib/api';
+import api from '@/lib/api';
 import {
   DashboardLayout,
   StatusBadge,
@@ -237,7 +237,7 @@ export function AdminPromos() {
 
   if (authLoading) {
     return (
-      <DashboardLayout title="Promo Codes" navItems={navItems} currentPath="/admin/promos">
+      <DashboardLayout title="Promo Codes" navItems={navItems}>
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-16 w-full" />
@@ -248,7 +248,7 @@ export function AdminPromos() {
   }
 
   return (
-    <DashboardLayout title="Promo Codes" navItems={navItems} currentPath="/admin/promos">
+    <DashboardLayout title="Promo Codes" navItems={navItems}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -377,11 +377,11 @@ export function AdminPromos() {
                       </td>
                       <td className="px-4 py-3">
                         {isExpired(promo) ? (
-                          <StatusBadge status="cancelled">Expired</StatusBadge>
+                          <StatusBadge status="Expired" variant="error" />
                         ) : promo.isActive ? (
-                          <StatusBadge status="approved">Active</StatusBadge>
+                          <StatusBadge status="Active" variant="success" />
                         ) : (
-                          <StatusBadge status="pending">Inactive</StatusBadge>
+                          <StatusBadge status="Inactive" variant="warning" />
                         )}
                       </td>
                       <td className="px-4 py-3">

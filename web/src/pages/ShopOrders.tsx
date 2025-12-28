@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, Loader2, MapPin, Clock, CheckCircle, ArrowRight } from 'lucide-react';
+import { Package, Loader2, Clock, CheckCircle, ArrowRight } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { shopApi } from '@/lib/api';
 import type { ShopOrder } from '@/types';

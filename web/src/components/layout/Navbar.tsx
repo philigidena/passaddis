@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Ticket, User, LogOut, Calendar, ShoppingBag, LayoutDashboard, Building2, Store, Package } from 'lucide-react';
+import { Menu, X, Ticket, User, LogOut, Calendar, ShoppingBag, LayoutDashboard, Building2, Store } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import clsx from 'clsx';
