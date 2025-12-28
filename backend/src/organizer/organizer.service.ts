@@ -241,6 +241,124 @@ export class OrganizerService {
     };
   }
 
+  // ==================== WALLET ====================
+
+  async getWallet(userId: string) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    // Get all events for this organizer
+    const events = await this.prisma.event.findMany({
+      where: { merchantId: merchant.id },
+      select: { id: true },
+    });
+    const eventIds = events.map((e) => e.id);
+
+    // Calculate wallet balance from transactions
+    const walletBalance = await this.prisma.walletTransaction.aggregate({
+      where: { merchantId: merchant.id },
+      _sum: { netAmount: true },
+    });
+
+    // Calculate pending settlement (paid orders not yet settled)
+    const pendingSettlement = await this.prisma.order.aggregate({
+      where: {
+        status: { in: ['PAID', 'COMPLETED'] },
+        settledAt: null,
+        tickets: { some: { eventId: { in: eventIds } } },
+      },
+      _sum: { merchantAmount: true },
+    });
+
+    // Total revenue (all time)
+    const totalRevenue = await this.prisma.order.aggregate({
+      where: {
+        status: { in: ['PAID', 'COMPLETED'] },
+        tickets: { some: { eventId: { in: eventIds } } },
+      },
+      _sum: { subtotal: true },
+    });
+
+    // Total withdrawn (DEBIT = money out)
+    const totalWithdrawn = await this.prisma.walletTransaction.aggregate({
+      where: {
+        merchantId: merchant.id,
+        type: 'DEBIT',
+      },
+      _sum: { amount: true },
+    });
+
+    return {
+      available: walletBalance._sum.netAmount || 0,
+      pending: pendingSettlement._sum.merchantAmount || 0,
+      totalEarnings: totalRevenue._sum.subtotal || 0,
+      totalWithdrawn: Math.abs(totalWithdrawn?._sum?.amount || 0),
+    };
+  }
+
+  async getWalletTransactions(userId: string) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    // Get wallet transactions
+    const transactions = await this.prisma.walletTransaction.findMany({
+      where: { merchantId: merchant.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    return transactions.map((tx) => ({
+      id: tx.id,
+      type: tx.type,
+      amount: tx.amount,
+      netAmount: tx.netAmount,
+      commission: tx.fee, // fee is the commission/platform fee
+      description: tx.description,
+      status: 'COMPLETED',
+      createdAt: tx.createdAt,
+      eventName: null, // Would need to lookup from reference if needed
+    }));
+  }
+
+  async getSettlements(userId: string) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    // Get settlement records
+    const settlements = await this.prisma.settlement.findMany({
+      where: { merchantId: merchant.id },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    return settlements.map((s) => ({
+      id: s.id,
+      amount: s.amount,
+      status: s.status,
+      bankName: merchant.bankName || 'Not specified',
+      accountNumber: merchant.bankAccount
+        ? `****${merchant.bankAccount.slice(-4)}`
+        : 'N/A',
+      requestedAt: s.createdAt,
+      completedAt: s.processedAt,
+    }));
+  }
+
   // ==================== EVENT MANAGEMENT ====================
 
   async getMyEvents(userId: string) {

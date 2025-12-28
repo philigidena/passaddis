@@ -1,144 +1,245 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { organizerApi, authApi } from '@/lib/api';
+import {
+  DashboardLayout,
+  DashboardButton,
+} from '@/components/layout/DashboardLayout';
+import type { MerchantProfile } from '@/types';
 
-interface OrganizerProfile {
+// Icons
+const DashboardIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+  </svg>
+);
+
+const EventsIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+);
+
+const WalletIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+  </svg>
+);
+
+const SettingsIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+);
+
+const navItems = [
+  { label: 'Dashboard', path: '/organizer', icon: <DashboardIcon /> },
+  { label: 'Events', path: '/organizer/events', icon: <EventsIcon /> },
+  { label: 'Wallet', path: '/organizer/wallet', icon: <WalletIcon /> },
+  { label: 'Settings', path: '/organizer/settings', icon: <SettingsIcon /> },
+];
+
+interface ProfileFormData {
   businessName: string;
-  businessType: string;
+  tradeName: string;
   description: string;
-  email: string;
-  phone: string;
-  website: string;
-  address: string;
   city: string;
-  logo?: string;
-  tinNumber: string;
   bankName: string;
-  bankAccountNumber: string;
-  bankAccountName: string;
+  bankAccount: string;
 }
-
-interface NotificationSettings {
-  emailNotifications: boolean;
-  smsNotifications: boolean;
-  ticketSaleAlerts: boolean;
-  dailySummary: boolean;
-  weeklyReport: boolean;
-  lowStockAlerts: boolean;
-}
-
-// Mock data
-const mockProfile: OrganizerProfile = {
-  businessName: 'Addis Events',
-  businessType: 'Event Management Company',
-  description: 'Premier event organizers in Addis Ababa, specializing in concerts, festivals, and corporate events.',
-  email: 'contact@addisevents.com',
-  phone: '+251911234567',
-  website: 'https://addisevents.com',
-  address: 'Bole Road, Near Edna Mall',
-  city: 'Addis Ababa',
-  tinNumber: '0012345678',
-  bankName: 'Commercial Bank of Ethiopia',
-  bankAccountNumber: '1000234567890',
-  bankAccountName: 'Addis Events PLC',
-};
-
-const mockNotifications: NotificationSettings = {
-  emailNotifications: true,
-  smsNotifications: true,
-  ticketSaleAlerts: true,
-  dailySummary: false,
-  weeklyReport: true,
-  lowStockAlerts: true,
-};
 
 export function OrganizerSettings() {
-  const [profile, setProfile] = useState<OrganizerProfile>(mockProfile);
-  const [notifications, setNotifications] = useState<NotificationSettings>(mockNotifications);
-  const [activeTab, setActiveTab] = useState<'profile' | 'bank' | 'notifications' | 'security'>('profile');
-  const [isSaving, setIsSaving] = useState(false);
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const { user, isLoading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const [profile, setProfile] = useState<MerchantProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<'profile' | 'bank' | 'security'>('profile');
+  const [isCreating, setIsCreating] = useState(false);
 
-  const navItems = [
-    { label: 'Dashboard', href: '/organizer', active: false },
-    { label: 'Events', href: '/organizer/events', active: false },
-    { label: 'Wallet', href: '/organizer/wallet', active: false },
-    { label: 'Settings', href: '/organizer/settings', active: true },
-  ];
+  const [formData, setFormData] = useState<ProfileFormData>({
+    businessName: '',
+    tradeName: '',
+    description: '',
+    city: '',
+    bankName: '',
+    bankAccount: '',
+  });
+
+  // Password change state
+  const [passwords, setPasswords] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && !['ORGANIZER', 'ADMIN', 'USER'].includes(user?.role || '')) {
+      navigate('/');
+    }
+  }, [user, authLoading, navigate]);
+
+  useEffect(() => {
+    if (user) {
+      loadProfile();
+    }
+  }, [user]);
+
+  const loadProfile = async () => {
+    setLoading(true);
+    try {
+      const response = await organizerApi.getProfile();
+      if (response.data) {
+        setProfile(response.data);
+        setFormData({
+          businessName: response.data.businessName || '',
+          tradeName: response.data.tradeName || '',
+          description: response.data.description || '',
+          city: response.data.city || '',
+          bankName: response.data.bankName || '',
+          bankAccount: response.data.bankAccount || '',
+        });
+        setIsCreating(false);
+      } else {
+        // Profile doesn't exist, user needs to create one
+        setIsCreating(true);
+      }
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+      setIsCreating(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSave = async () => {
-    setIsSaving(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
+    if (!formData.businessName.trim()) {
+      setError('Business name is required');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      let response;
+      if (isCreating) {
+        response = await organizerApi.createProfile({
+          businessName: formData.businessName,
+          tradeName: formData.tradeName || undefined,
+          description: formData.description || undefined,
+          city: formData.city || undefined,
+          bankName: formData.bankName || undefined,
+          bankAccount: formData.bankAccount || undefined,
+        });
+      } else {
+        response = await organizerApi.updateProfile({
+          businessName: formData.businessName,
+          tradeName: formData.tradeName || undefined,
+          description: formData.description || undefined,
+          city: formData.city || undefined,
+          bankName: formData.bankName || undefined,
+          bankAccount: formData.bankAccount || undefined,
+        });
+      }
+
+      if (response.data) {
+        setProfile(response.data);
+        setIsCreating(false);
+        setSuccessMessage(isCreating ? 'Profile created successfully!' : 'Settings saved successfully!');
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } else {
+        setError(response.error || 'Failed to save settings');
+      }
+    } catch (error) {
+      setError('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleNotificationChange = (key: keyof NotificationSettings) => {
-    setNotifications((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+  const handlePasswordChange = async () => {
+    if (passwords.newPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    if (passwords.newPassword !== passwords.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setChangingPassword(true);
+    setError('');
+
+    try {
+      const response = await authApi.setPassword(passwords.newPassword);
+      if (response.data) {
+        setSuccessMessage('Password updated successfully!');
+        setPasswords({ newPassword: '', confirmPassword: '' });
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } else {
+        setError(response.error || 'Failed to update password');
+      }
+    } catch (error) {
+      setError('Failed to update password');
+    } finally {
+      setChangingPassword(false);
+    }
   };
+
+  if (authLoading || loading) {
+    return (
+      <DashboardLayout title="Organizer Portal" navItems={navItems} accentColor="purple">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400"></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-dark-bg">
-      {/* Navigation */}
-      <nav className="bg-dark-card border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-8">
-              <a href="/" className="text-xl font-bold text-primary">
-                PassAddis
-              </a>
-              <div className="hidden md:flex space-x-4">
-                {navItems.map((item) => (
-                  <a
-                    key={item.label}
-                    href={item.href}
-                    className={`px-3 py-2 rounded-md text-sm font-medium ${
-                      item.active
-                        ? 'bg-primary/20 text-primary'
-                        : 'text-white/60 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    {item.label}
-                  </a>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-white/60 text-sm">Organizer</span>
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                <span className="text-primary text-sm font-medium">O</span>
-              </div>
-            </div>
-          </div>
+    <DashboardLayout title="Organizer Portal" navItems={navItems} accentColor="purple">
+      {/* Page Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl lg:text-3xl font-bold text-white">
+          {isCreating ? 'Create Organizer Profile' : 'Settings'}
+        </h1>
+        <p className="text-gray-400 mt-1">
+          {isCreating
+            ? 'Set up your organizer profile to start hosting events'
+            : 'Manage your organizer profile and preferences'}
+        </p>
+      </div>
+
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-lg p-4 flex items-center gap-3">
+          <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="text-green-400">{successMessage}</span>
         </div>
-      </nav>
+      )}
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white">Settings</h1>
-          <p className="text-white/60 mt-1">Manage your organizer profile and preferences</p>
+      {error && (
+        <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-center gap-3">
+          <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span className="text-red-400">{error}</span>
         </div>
+      )}
 
-        {/* Success Message */}
-        {showSuccessMessage && (
-          <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-lg p-4 flex items-center space-x-3">
-            <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <span className="text-green-400">Settings saved successfully!</span>
-          </div>
-        )}
-
-        {/* Tabs */}
+      {/* Tabs - only show if not creating */}
+      {!isCreating && (
         <div className="flex flex-wrap gap-2 mb-6">
           {[
             { id: 'profile', label: 'Business Profile' },
             { id: 'bank', label: 'Bank Account' },
-            { id: 'notifications', label: 'Notifications' },
             { id: 'security', label: 'Security' },
           ].map((tab) => (
             <button
@@ -146,413 +247,272 @@ export function OrganizerSettings() {
               onClick={() => setActiveTab(tab.id as typeof activeTab)}
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-primary text-white'
-                  : 'bg-dark-card text-white/60 hover:text-white'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:text-white'
               }`}
             >
               {tab.label}
             </button>
           ))}
         </div>
+      )}
 
-        {/* Content */}
-        <div className="bg-dark-card rounded-xl p-6">
-          {activeTab === 'profile' && (
-            <div className="space-y-6">
-              {/* Logo Upload */}
-              <div className="flex items-center space-x-6">
-                <div className="w-24 h-24 rounded-xl bg-primary/20 flex items-center justify-center overflow-hidden">
-                  {profile.logo ? (
-                    <img src={profile.logo} alt="Logo" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-4xl font-bold text-primary">{profile.businessName.charAt(0)}</span>
-                  )}
+      {/* Content */}
+      <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
+        {(activeTab === 'profile' || isCreating) && (
+          <div className="space-y-6">
+            {/* Profile Header with Status */}
+            {profile && !isCreating && (
+              <div className="flex items-center gap-4 p-4 bg-gray-700/50 rounded-lg mb-6">
+                <div className="w-16 h-16 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                  <span className="text-2xl font-bold text-purple-400">
+                    {profile.businessName?.charAt(0) || 'O'}
+                  </span>
                 </div>
                 <div>
-                  <button className="bg-dark-bg border border-white/10 text-white px-4 py-2 rounded-lg hover:border-primary/50 transition-colors">
-                    Upload Logo
-                  </button>
-                  <p className="text-white/40 text-sm mt-2">PNG, JPG up to 2MB</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-white/60 text-sm mb-1">Business Name</label>
-                  <input
-                    type="text"
-                    value={profile.businessName}
-                    onChange={(e) => setProfile({ ...profile, businessName: e.target.value })}
-                    className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-white/60 text-sm mb-1">Business Type</label>
-                  <select
-                    value={profile.businessType}
-                    onChange={(e) => setProfile({ ...profile, businessType: e.target.value })}
-                    className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                  >
-                    <option>Event Management Company</option>
-                    <option>Concert Promoter</option>
-                    <option>Festival Organizer</option>
-                    <option>Corporate Events</option>
-                    <option>Individual Organizer</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-white/60 text-sm mb-1">Description</label>
-                <textarea
-                  value={profile.description}
-                  onChange={(e) => setProfile({ ...profile, description: e.target.value })}
-                  rows={3}
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary resize-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-white/60 text-sm mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={profile.email}
-                    onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                    className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-white/60 text-sm mb-1">Phone</label>
-                  <input
-                    type="tel"
-                    value={profile.phone}
-                    onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                    className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-white/60 text-sm mb-1">Website</label>
-                <input
-                  type="url"
-                  value={profile.website}
-                  onChange={(e) => setProfile({ ...profile, website: e.target.value })}
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                  placeholder="https://"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-white/60 text-sm mb-1">Address</label>
-                  <input
-                    type="text"
-                    value={profile.address}
-                    onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-                    className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-white/60 text-sm mb-1">City</label>
-                  <input
-                    type="text"
-                    value={profile.city}
-                    onChange={(e) => setProfile({ ...profile, city: e.target.value })}
-                    className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-white/60 text-sm mb-1">TIN Number</label>
-                <input
-                  type="text"
-                  value={profile.tinNumber}
-                  onChange={(e) => setProfile({ ...profile, tinNumber: e.target.value })}
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                  placeholder="Tax Identification Number"
-                />
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'bank' && (
-            <div className="space-y-6">
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-6">
-                <div className="flex items-start space-x-3">
-                  <svg className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <div>
-                    <p className="text-yellow-400 font-medium text-sm">Bank Account Verification</p>
-                    <p className="text-white/60 text-sm mt-1">
-                      Your bank account details are used for receiving payments. Please ensure the information is accurate.
-                    </p>
+                  <h3 className="text-lg font-semibold text-white">{profile.businessName}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    {profile.isVerified ? (
+                      <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">
+                        Verified
+                      </span>
+                    ) : (
+                      <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded">
+                        Pending Verification
+                      </span>
+                    )}
+                    <span className="text-xs bg-gray-600 text-gray-300 px-2 py-1 rounded">
+                      {profile.status || 'ACTIVE'}
+                    </span>
                   </div>
                 </div>
               </div>
+            )}
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-white/60 text-sm mb-1">Bank Name</label>
-                <select
-                  value={profile.bankName}
-                  onChange={(e) => setProfile({ ...profile, bankName: e.target.value })}
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                >
-                  <option>Commercial Bank of Ethiopia</option>
-                  <option>Dashen Bank</option>
-                  <option>Awash Bank</option>
-                  <option>Abyssinia Bank</option>
-                  <option>United Bank</option>
-                  <option>Wegagen Bank</option>
-                  <option>Nib International Bank</option>
-                  <option>Zemen Bank</option>
-                  <option>Oromia Bank</option>
-                  <option>Bunna Bank</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-white/60 text-sm mb-1">Account Number</label>
+                <label className="block text-gray-400 text-sm mb-1">
+                  Business Name <span className="text-red-400">*</span>
+                </label>
                 <input
                   type="text"
-                  value={profile.bankAccountNumber}
-                  onChange={(e) => setProfile({ ...profile, bankAccountNumber: e.target.value })}
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                  placeholder="Enter your bank account number"
+                  value={formData.businessName}
+                  onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                  placeholder="Your business name"
                 />
               </div>
-
               <div>
-                <label className="block text-white/60 text-sm mb-1">Account Holder Name</label>
+                <label className="block text-gray-400 text-sm mb-1">Trade Name</label>
                 <input
                   type="text"
-                  value={profile.bankAccountName}
-                  onChange={(e) => setProfile({ ...profile, bankAccountName: e.target.value })}
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                  placeholder="Name as it appears on the account"
+                  value={formData.tradeName}
+                  onChange={(e) => setFormData({ ...formData, tradeName: e.target.value })}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                  placeholder="Display name (optional)"
                 />
               </div>
+            </div>
 
-              <div className="bg-dark-bg rounded-lg p-4">
-                <h4 className="text-white font-medium mb-2">Current Bank Details</h4>
+            <div>
+              <label className="block text-gray-400 text-sm mb-1">Description</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500 resize-none"
+                placeholder="Tell us about your organization..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-gray-400 text-sm mb-1">City</label>
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                placeholder="e.g., Addis Ababa"
+              />
+            </div>
+
+            {/* Show bank fields when creating */}
+            {isCreating && (
+              <>
+                <div className="border-t border-gray-700 pt-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Bank Details (Optional)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-gray-400 text-sm mb-1">Bank Name</label>
+                      <select
+                        value={formData.bankName}
+                        onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                      >
+                        <option value="">Select a bank</option>
+                        <option value="Commercial Bank of Ethiopia">Commercial Bank of Ethiopia</option>
+                        <option value="Dashen Bank">Dashen Bank</option>
+                        <option value="Awash Bank">Awash Bank</option>
+                        <option value="Abyssinia Bank">Abyssinia Bank</option>
+                        <option value="United Bank">United Bank</option>
+                        <option value="Wegagen Bank">Wegagen Bank</option>
+                        <option value="Nib International Bank">Nib International Bank</option>
+                        <option value="Zemen Bank">Zemen Bank</option>
+                        <option value="Oromia Bank">Oromia Bank</option>
+                        <option value="Bunna Bank">Bunna Bank</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-gray-400 text-sm mb-1">Account Number</label>
+                      <input
+                        type="text"
+                        value={formData.bankAccount}
+                        onChange={(e) => setFormData({ ...formData, bankAccount: e.target.value })}
+                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                        placeholder="Your bank account number"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'bank' && !isCreating && (
+          <div className="space-y-6">
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                  <p className="text-yellow-400 font-medium text-sm">Bank Account Verification</p>
+                  <p className="text-gray-400 text-sm mt-1">
+                    Your bank account details are used for receiving payouts. Please ensure the information is accurate.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-gray-400 text-sm mb-1">Bank Name</label>
+              <select
+                value={formData.bankName}
+                onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+              >
+                <option value="">Select a bank</option>
+                <option value="Commercial Bank of Ethiopia">Commercial Bank of Ethiopia</option>
+                <option value="Dashen Bank">Dashen Bank</option>
+                <option value="Awash Bank">Awash Bank</option>
+                <option value="Abyssinia Bank">Abyssinia Bank</option>
+                <option value="United Bank">United Bank</option>
+                <option value="Wegagen Bank">Wegagen Bank</option>
+                <option value="Nib International Bank">Nib International Bank</option>
+                <option value="Zemen Bank">Zemen Bank</option>
+                <option value="Oromia Bank">Oromia Bank</option>
+                <option value="Bunna Bank">Bunna Bank</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-gray-400 text-sm mb-1">Account Number</label>
+              <input
+                type="text"
+                value={formData.bankAccount}
+                onChange={(e) => setFormData({ ...formData, bankAccount: e.target.value })}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                placeholder="Enter your bank account number"
+              />
+            </div>
+
+            {/* Current Bank Details Display */}
+            {profile?.bankName && (
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h4 className="text-white font-medium mb-3">Current Bank Details</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-white/60">Bank:</span>
+                    <span className="text-gray-400">Bank:</span>
                     <span className="text-white">{profile.bankName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-white/60">Account:</span>
-                    <span className="text-white">****{profile.bankAccountNumber.slice(-4)}</span>
+                    <span className="text-gray-400">Account:</span>
+                    <span className="text-white">
+                      {profile.bankAccount ? `****${profile.bankAccount.slice(-4)}` : 'Not set'}
+                    </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Name:</span>
-                    <span className="text-white">{profile.bankAccountName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Status:</span>
-                    <span className="text-green-400">Verified</span>
-                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'security' && !isCreating && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-white font-semibold mb-4">Change Password</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-gray-400 text-sm mb-1">New Password</label>
+                  <input
+                    type="password"
+                    value={passwords.newPassword}
+                    onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                    placeholder="Enter new password"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-400 text-sm mb-1">Confirm New Password</label>
+                  <input
+                    type="password"
+                    value={passwords.confirmPassword}
+                    onChange={(e) => setPasswords({ ...passwords, confirmPassword: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                    placeholder="Confirm new password"
+                  />
+                </div>
+                <DashboardButton
+                  onClick={handlePasswordChange}
+                  variant="secondary"
+                  disabled={changingPassword || !passwords.newPassword}
+                >
+                  {changingPassword ? 'Updating...' : 'Update Password'}
+                </DashboardButton>
+              </div>
+            </div>
+
+            {/* Account Info */}
+            <div className="border-t border-gray-700 pt-6">
+              <h3 className="text-white font-semibold mb-4">Account Information</h3>
+              <div className="bg-gray-700 rounded-lg p-4 space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Phone:</span>
+                  <span className="text-white">{user?.phone || 'Not set'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Email:</span>
+                  <span className="text-white">{user?.email || 'Not set'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Role:</span>
+                  <span className="text-white">{user?.role}</span>
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === 'notifications' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-white font-semibold mb-4">Communication Channels</h3>
-                <div className="space-y-4">
-                  <label className="flex items-center justify-between p-4 bg-dark-bg rounded-lg cursor-pointer">
-                    <div>
-                      <p className="text-white font-medium">Email Notifications</p>
-                      <p className="text-white/60 text-sm">Receive notifications via email</p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={notifications.emailNotifications}
-                      onChange={() => handleNotificationChange('emailNotifications')}
-                      className="w-5 h-5 rounded border-white/10 bg-dark-bg text-primary focus:ring-primary"
-                    />
-                  </label>
-                  <label className="flex items-center justify-between p-4 bg-dark-bg rounded-lg cursor-pointer">
-                    <div>
-                      <p className="text-white font-medium">SMS Notifications</p>
-                      <p className="text-white/60 text-sm">Receive notifications via SMS</p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={notifications.smsNotifications}
-                      onChange={() => handleNotificationChange('smsNotifications')}
-                      className="w-5 h-5 rounded border-white/10 bg-dark-bg text-primary focus:ring-primary"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-white font-semibold mb-4">Notification Types</h3>
-                <div className="space-y-4">
-                  <label className="flex items-center justify-between p-4 bg-dark-bg rounded-lg cursor-pointer">
-                    <div>
-                      <p className="text-white font-medium">Ticket Sale Alerts</p>
-                      <p className="text-white/60 text-sm">Get notified when someone purchases a ticket</p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={notifications.ticketSaleAlerts}
-                      onChange={() => handleNotificationChange('ticketSaleAlerts')}
-                      className="w-5 h-5 rounded border-white/10 bg-dark-bg text-primary focus:ring-primary"
-                    />
-                  </label>
-                  <label className="flex items-center justify-between p-4 bg-dark-bg rounded-lg cursor-pointer">
-                    <div>
-                      <p className="text-white font-medium">Daily Summary</p>
-                      <p className="text-white/60 text-sm">Receive a daily summary of sales and activity</p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={notifications.dailySummary}
-                      onChange={() => handleNotificationChange('dailySummary')}
-                      className="w-5 h-5 rounded border-white/10 bg-dark-bg text-primary focus:ring-primary"
-                    />
-                  </label>
-                  <label className="flex items-center justify-between p-4 bg-dark-bg rounded-lg cursor-pointer">
-                    <div>
-                      <p className="text-white font-medium">Weekly Report</p>
-                      <p className="text-white/60 text-sm">Receive a weekly performance report</p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={notifications.weeklyReport}
-                      onChange={() => handleNotificationChange('weeklyReport')}
-                      className="w-5 h-5 rounded border-white/10 bg-dark-bg text-primary focus:ring-primary"
-                    />
-                  </label>
-                  <label className="flex items-center justify-between p-4 bg-dark-bg rounded-lg cursor-pointer">
-                    <div>
-                      <p className="text-white font-medium">Low Ticket Stock Alerts</p>
-                      <p className="text-white/60 text-sm">Get notified when ticket availability is low</p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={notifications.lowStockAlerts}
-                      onChange={() => handleNotificationChange('lowStockAlerts')}
-                      className="w-5 h-5 rounded border-white/10 bg-dark-bg text-primary focus:ring-primary"
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'security' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-white font-semibold mb-4">Change Password</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-white/60 text-sm mb-1">Current Password</label>
-                    <input
-                      type="password"
-                      className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                      placeholder="Enter current password"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-white/60 text-sm mb-1">New Password</label>
-                    <input
-                      type="password"
-                      className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                      placeholder="Enter new password"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-white/60 text-sm mb-1">Confirm New Password</label>
-                    <input
-                      type="password"
-                      className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
-                      placeholder="Confirm new password"
-                    />
-                  </div>
-                  <button className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
-                    Update Password
-                  </button>
-                </div>
-              </div>
-
-              <div className="border-t border-white/10 pt-6">
-                <h3 className="text-white font-semibold mb-4">Two-Factor Authentication</h3>
-                <div className="bg-dark-bg rounded-lg p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-white font-medium">SMS Authentication</p>
-                    <p className="text-white/60 text-sm">Receive a code via SMS when signing in</p>
-                  </div>
-                  <button className="bg-primary/20 text-primary px-4 py-2 rounded-lg hover:bg-primary/30 transition-colors">
-                    Enable
-                  </button>
-                </div>
-              </div>
-
-              <div className="border-t border-white/10 pt-6">
-                <h3 className="text-white font-semibold mb-4">Active Sessions</h3>
-                <div className="space-y-3">
-                  <div className="bg-dark-bg rounded-lg p-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <svg className="w-8 h-8 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                      <div>
-                        <p className="text-white font-medium">Chrome on Windows</p>
-                        <p className="text-white/60 text-sm">Addis Ababa, Ethiopia • Current session</p>
-                      </div>
-                    </div>
-                    <span className="text-green-400 text-sm">Active</span>
-                  </div>
-                  <div className="bg-dark-bg rounded-lg p-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <svg className="w-8 h-8 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
-                      <div>
-                        <p className="text-white font-medium">PassAddis App on iPhone</p>
-                        <p className="text-white/60 text-sm">Addis Ababa, Ethiopia • Last active 2 hours ago</p>
-                      </div>
-                    </div>
-                    <button className="text-red-400 text-sm hover:text-red-300">Sign Out</button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-white/10 pt-6">
-                <h3 className="text-red-400 font-semibold mb-4">Danger Zone</h3>
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-white font-medium">Deactivate Account</p>
-                      <p className="text-white/60 text-sm mt-1">
-                        Permanently deactivate your organizer account. This action cannot be undone.
-                      </p>
-                    </div>
-                    <button className="text-red-400 border border-red-400/30 px-4 py-2 rounded-lg hover:bg-red-500/10 transition-colors">
-                      Deactivate
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Save Button */}
-          <div className="mt-8 pt-6 border-t border-white/10 flex justify-end">
-            <button
+        {/* Save Button */}
+        {(activeTab !== 'security' || isCreating) && (
+          <div className="mt-8 pt-6 border-t border-gray-700 flex justify-end">
+            <DashboardButton
               onClick={handleSave}
-              disabled={isSaving}
-              className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center space-x-2"
+              variant="primary"
+              disabled={saving}
             >
-              {isSaving ? (
+              {saving ? (
                 <>
                   <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -561,12 +521,12 @@ export function OrganizerSettings() {
                   <span>Saving...</span>
                 </>
               ) : (
-                <span>Save Changes</span>
+                <span>{isCreating ? 'Create Profile' : 'Save Changes'}</span>
               )}
-            </button>
+            </DashboardButton>
           </div>
-        </div>
+        )}
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

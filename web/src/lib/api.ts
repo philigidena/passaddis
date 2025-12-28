@@ -323,6 +323,39 @@ export const organizerApi = {
       attendees: Ticket[];
     }>(api.get(`/organizer/events/${eventId}/attendees`)),
 
+  // Wallet
+  getWallet: () =>
+    handleResponse<{
+      available: number;
+      pending: number;
+      totalEarnings: number;
+      totalWithdrawn: number;
+    }>(api.get('/organizer/wallet')),
+
+  getWalletTransactions: () =>
+    handleResponse<Array<{
+      id: string;
+      type: string;
+      amount: number;
+      netAmount: number;
+      commission: number;
+      description: string;
+      status: string;
+      createdAt: string;
+      eventName: string | null;
+    }>>(api.get('/organizer/wallet/transactions')),
+
+  getSettlements: () =>
+    handleResponse<Array<{
+      id: string;
+      amount: number;
+      status: string;
+      bankName: string;
+      accountNumber: string;
+      requestedAt: string;
+      completedAt: string | null;
+    }>>(api.get('/organizer/wallet/settlements')),
+
   // Ticket Types
   addTicketType: (eventId: string, data: { name: string; price: number; quantity: number }) =>
     handleResponse<any>(api.post(`/organizer/events/${eventId}/ticket-types`, data)),

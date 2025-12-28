@@ -60,6 +60,29 @@ export class OrganizerController {
     return this.organizerService.getDashboard(userId);
   }
 
+  // ==================== WALLET ====================
+
+  @Get('wallet')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async getWallet(@CurrentUser('id') userId: string) {
+    return this.organizerService.getWallet(userId);
+  }
+
+  @Get('wallet/transactions')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async getWalletTransactions(@CurrentUser('id') userId: string) {
+    return this.organizerService.getWalletTransactions(userId);
+  }
+
+  @Get('wallet/settlements')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async getSettlements(@CurrentUser('id') userId: string) {
+    return this.organizerService.getSettlements(userId);
+  }
+
   // ==================== EVENTS ====================
 
   @Get('events')
