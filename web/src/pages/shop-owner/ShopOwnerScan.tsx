@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { shopOwnerApi } from '@/lib/api';
 import {
   DashboardLayout,
-  StatusBadge,
   DashboardButton,
 } from '@/components/layout/DashboardLayout';
 import type { ShopOrder } from '@/types';
@@ -49,8 +47,7 @@ interface ValidationResult {
 }
 
 export function ShopOwnerScan() {
-  const { user, isLoading: authLoading } = useAuth();
-  const navigate = useNavigate();
+  const { isLoading: authLoading } = useAuth();
   const [qrCode, setQrCode] = useState('');
   const [validating, setValidating] = useState(false);
   const [result, setResult] = useState<ValidationResult | null>(null);
@@ -132,11 +129,10 @@ export function ShopOwnerScan() {
               className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-500 text-center font-mono text-lg"
               disabled={validating}
             />
-            <DashboardButton
+            <button
               type="submit"
-              variant="primary"
-              className="w-full mt-4"
               disabled={!qrCode.trim() || validating}
+              className="w-full mt-4 inline-flex items-center justify-center gap-2 rounded-lg font-medium px-4 py-2 text-sm bg-primary text-white hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {validating ? (
                 <>
@@ -151,7 +147,7 @@ export function ShopOwnerScan() {
                   Validate Pickup
                 </>
               )}
-            </DashboardButton>
+            </button>
           </form>
 
           <p className="text-sm text-gray-400 text-center mt-4">

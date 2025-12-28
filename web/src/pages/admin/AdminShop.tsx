@@ -7,7 +7,7 @@ import {
   StatusBadge,
   DashboardButton,
 } from '@/components/layout/DashboardLayout';
-import type { ShopItem, PickupLocation } from '@/types';
+import type { ShopItem, PickupLocation, ShopCategory } from '@/types';
 
 // Icons
 const DashboardIcon = () => (
@@ -48,13 +48,13 @@ const navItems = [
   { label: 'Shop Items', path: '/admin/shop', icon: <ShopIcon /> },
 ];
 
-const categories = ['All', 'APPAREL', 'ACCESSORIES', 'FOOD_DRINKS', 'MERCHANDISE'];
+const categories = ['All', 'WATER', 'DRINKS', 'SNACKS', 'MERCH', 'APPAREL', 'FOOD', 'OTHER'];
 
 interface ItemFormData {
   name: string;
   description: string;
   price: number;
-  category: string;
+  category: ShopCategory;
   imageUrl: string;
   inStock: boolean;
 }
@@ -508,7 +508,7 @@ export function AdminShop() {
                   <label className="block text-gray-400 text-sm mb-1">Category</label>
                   <select
                     value={itemForm.category}
-                    onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}
+                    onChange={(e) => setItemForm({ ...itemForm, category: e.target.value as ShopCategory })}
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary"
                   >
                     {categories.filter(c => c !== 'All').map((category) => (

@@ -22,6 +22,8 @@ export interface MerchantProfile {
   isVerified: boolean;
   commissionRate: number;
   city: string;
+  bankName?: string;
+  bankAccount?: string;
   user?: User;
 }
 
@@ -185,7 +187,7 @@ export interface ShopItem {
   inStock: boolean;
 }
 
-export type ShopCategory = 'WATER' | 'DRINKS' | 'SNACKS' | 'MERCH';
+export type ShopCategory = 'WATER' | 'DRINKS' | 'SNACKS' | 'MERCH' | 'APPAREL' | 'FOOD' | 'OTHER';
 
 export interface ShopOrder {
   id: string;

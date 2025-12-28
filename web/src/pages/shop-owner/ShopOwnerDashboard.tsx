@@ -8,7 +8,7 @@ import {
   StatusBadge,
   DashboardButton,
 } from '@/components/layout/DashboardLayout';
-import type { ShopOrder, MerchantProfile } from '@/types';
+import type { ShopOrder } from '@/types';
 
 // Icons
 const DashboardIcon = () => (

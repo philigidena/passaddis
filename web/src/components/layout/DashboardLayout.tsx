@@ -280,7 +280,7 @@ export function DashboardButton({
 }: {
   children: ReactNode;
   onClick?: () => void;
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline';
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   className?: string;
@@ -290,6 +290,7 @@ export function DashboardButton({
     secondary: 'bg-gray-700 text-white hover:bg-gray-600',
     danger: 'bg-red-500 text-white hover:bg-red-600',
     ghost: 'bg-transparent text-gray-400 hover:text-white hover:bg-gray-700',
+    outline: 'bg-transparent border border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white',
   };
 
   const sizes = {
