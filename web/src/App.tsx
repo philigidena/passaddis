@@ -13,6 +13,9 @@ import { AdminUsers } from '@/pages/admin/AdminUsers';
 import { AdminOrganizers } from '@/pages/admin/AdminOrganizers';
 import { AdminShop } from '@/pages/admin/AdminShop';
 import { AdminPromos } from '@/pages/admin/AdminPromos';
+import { ShopPage } from '@/pages/Shop';
+import { ShopOrdersPage } from '@/pages/ShopOrders';
+import { ShopOrderDetailPage } from '@/pages/ShopOrderDetail';
 import { OrganizerDashboard } from '@/pages/organizer/OrganizerDashboard';
 import { OrganizerEvents } from '@/pages/organizer/OrganizerEvents';
 import { OrganizerWallet } from '@/pages/organizer/OrganizerWallet';
@@ -223,8 +226,26 @@ function AppRoutes() {
         }
       />
 
+      {/* Shop Routes (Public browsing, protected checkout) */}
+      <Route path="/shop" element={<ShopPage />} />
+      <Route
+        path="/shop/orders"
+        element={
+          <ProtectedRoute>
+            <ShopOrdersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop/orders/:id"
+        element={
+          <ProtectedRoute>
+            <ShopOrderDetailPage />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Other Routes */}
-      <Route path="/shop" element={<ComingSoon title="Shop" />} />
       <Route
         path="/profile"
         element={

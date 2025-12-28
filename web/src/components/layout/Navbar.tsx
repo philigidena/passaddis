@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Ticket, User, LogOut, Calendar, ShoppingBag, LayoutDashboard, Building2, Store } from 'lucide-react';
+import { Menu, X, Ticket, User, LogOut, Calendar, ShoppingBag, LayoutDashboard, Building2, Store, Package } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import clsx from 'clsx';
@@ -157,6 +157,13 @@ export function Navbar() {
                 onClick={() => setIsOpen(false)}
               >
                 My Tickets
+              </Link>
+              <Link
+                to="/shop/orders"
+                className="block text-white/70 hover:text-white transition-colors"
+                onClick={() => setIsOpen(false)}
+              >
+                Shop Orders
               </Link>
               {dashboardLink && (
                 <Link
