@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Mail, Lock, User, Phone, Eye, EyeOff, ArrowLeft, Ticket } from 'lucide-react';
+import { Mail, Lock, User, Phone, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -163,10 +163,11 @@ export function SignInPage() {
           <div className="w-full max-w-md">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2 mb-8">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-                <Ticket className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-2xl font-bold text-white">PassAddis</span>
+              <img
+                src="/images/PassAddis_Logo_white.png"
+                alt="PassAddis"
+                className="h-10 w-auto"
+              />
             </Link>
 
             {/* Title */}

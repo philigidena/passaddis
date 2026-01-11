@@ -15,7 +15,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        // Point to production API for testing (change to localhost:3000 for local backend)
+        target: 'http://passaddis-dev-backend-env.eba-bvsaimrn.eu-north-1.elasticbeanstalk.com',
         changeOrigin: true,
       },
     },

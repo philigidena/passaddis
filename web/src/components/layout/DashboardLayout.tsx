@@ -71,12 +71,13 @@ export function DashboardLayout({
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center gap-3 px-6 h-16 border-b border-gray-700">
-            <div className={`w-8 h-8 rounded-lg bg-${accentColor} flex items-center justify-center`}>
-              <span className="text-white font-bold text-sm">PA</span>
-            </div>
-            <span className="font-bold text-white">{title}</span>
-          </div>
+          <Link to="/" className="flex items-center gap-3 px-6 h-16 border-b border-gray-700">
+            <img
+              src="/images/PassAddis_Logo_white.png"
+              alt="PassAddis"
+              className="h-8 w-auto"
+            />
+          </Link>
 
           {/* Nav Items */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
