@@ -24,7 +24,7 @@ const STATUS_CONFIG: Record<string, { label: string; description: string; color:
   },
   PAID: {
     label: 'Order Confirmed',
-    description: 'Your order is being prepared',
+    description: 'Your order is being prepared. Keep your QR code ready for pickup.',
     color: 'text-primary',
   },
   READY_FOR_PICKUP: {
@@ -98,7 +98,8 @@ export function ShopOrderDetailPage() {
 
   const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.PENDING;
   const currentStepIndex = STATUS_STEPS.indexOf(order.status);
-  const showQR = order.status === 'READY_FOR_PICKUP' && order.qrCode;
+  // Show QR code for PAID and READY_FOR_PICKUP orders
+  const showQR = ['PAID', 'READY_FOR_PICKUP'].includes(order.status) && order.qrCode;
 
   return (
     <Layout>
