@@ -324,24 +324,46 @@ export class PaymentsService {
       }
     }
 
-    await this.prisma.$transaction([
-      this.prisma.payment.update({
+    // Update payment and order status
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
         where: { id: payment.id },
         data: {
           status: isSuccess ? 'COMPLETED' : 'FAILED',
           providerRef: data.reference,
           providerData: data as any,
         },
-      }),
-      this.prisma.order.update({
+      });
+
+      await tx.order.update({
         where: { id: payment.orderId },
         data: {
           status: isSuccess ? 'PAID' : 'PENDING',
           paymentMethod: paymentMethod,
           paymentRef: data.reference,
         },
-      }),
-    ]);
+      });
+
+      // If payment successful, deduct stock for shop orders
+      if (isSuccess) {
+        const order = await tx.order.findUnique({
+          where: { id: payment.orderId },
+          include: { items: true },
+        });
+
+        if (order && order.items.length > 0) {
+          // This is a shop order - deduct stock
+          for (const item of order.items) {
+            await tx.shopItem.update({
+              where: { id: item.shopItemId },
+              data: {
+                stockQuantity: { decrement: item.quantity },
+              },
+            });
+          }
+        }
+      }
+    });
 
     console.log(
       `Chapa payment ${isSuccess ? 'succeeded' : 'failed'}: ${data.tx_ref}`,
@@ -469,24 +491,42 @@ export class PaymentsService {
       return { success: true, message: 'Payment already completed', order: payment.order };
     }
 
-    // Mark payment and order as completed
-    await this.prisma.$transaction([
-      this.prisma.payment.update({
+    // Mark payment and order as completed, deduct stock for shop orders
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
         where: { id: payment.id },
         data: {
           status: 'COMPLETED',
           providerRef: `TEST-${Date.now()}`,
         },
-      }),
-      this.prisma.order.update({
+      });
+
+      await tx.order.update({
         where: { id: payment.orderId },
         data: {
           status: 'PAID',
           paymentMethod: 'CHAPA',
           paymentRef: `TEST-${Date.now()}`,
         },
-      }),
-    ]);
+      });
+
+      // Deduct stock for shop orders
+      const order = await tx.order.findUnique({
+        where: { id: payment.orderId },
+        include: { items: true },
+      });
+
+      if (order && order.items.length > 0) {
+        for (const item of order.items) {
+          await tx.shopItem.update({
+            where: { id: item.shopItemId },
+            data: {
+              stockQuantity: { decrement: item.quantity },
+            },
+          });
+        }
+      }
+    });
 
     console.log(`✅ Test payment completed: ${paymentId}`);
 

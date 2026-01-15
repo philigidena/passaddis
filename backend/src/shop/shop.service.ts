@@ -206,6 +206,13 @@ export class ShopService {
         throw new BadRequestException(`${shopItem.name} is out of stock`);
       }
 
+      // Validate stock quantity
+      if (shopItem.stockQuantity !== null && item.quantity > shopItem.stockQuantity) {
+        throw new BadRequestException(
+          `Only ${shopItem.stockQuantity} ${shopItem.name} available. You requested ${item.quantity}.`
+        );
+      }
+
       // Verify merchant is active if item has a merchant
       if (shopItem.merchant && shopItem.merchant.status !== 'ACTIVE') {
         throw new BadRequestException(
