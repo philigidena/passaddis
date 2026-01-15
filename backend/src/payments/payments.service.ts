@@ -102,7 +102,11 @@ export class PaymentsService {
 
     // Initiate payment with provider
     const notifyUrl = `${this.apiUrl}/api/payments/callback/${dto.method.toLowerCase()}`;
-    const returnUrl = `${this.frontendUrl}/orders/${order.id}`;
+    // Return URL based on order type (ticket vs shop)
+    const isTicketOrder = order.tickets.length > 0;
+    const returnUrl = isTicketOrder
+      ? `${this.frontendUrl}/tickets`
+      : `${this.frontendUrl}/shop/orders/${order.id}`;
 
     let result;
 
@@ -121,7 +125,7 @@ export class PaymentsService {
         email: user?.email || undefined,
         tx_ref: payment.id,
         callback_url: `${this.apiUrl}/api/payments/callback/chapa`,
-        return_url: `${this.frontendUrl}/orders/${order.id}`,
+        return_url: returnUrl,
         customization: {
           title: 'PassAddis Pay',
           description: description,
@@ -179,12 +183,27 @@ export class PaymentsService {
       throw new BadRequestException('Unsupported payment method');
     }
 
+    // Check if payment initiation was successful
+    if (!result.success) {
+      throw new BadRequestException(result.error || 'Payment initialization failed');
+    }
+
+    // Normalize the checkout URL from different providers
+    const checkoutUrl = 'checkout_url' in result ? result.checkout_url :
+                        'paymentUrl' in result ? result.paymentUrl : undefined;
+
+    // Normalize the transaction reference from different providers
+    const txRef = 'tx_ref' in result ? result.tx_ref :
+                  'outTradeNo' in result ? result.outTradeNo :
+                  'referenceId' in result ? result.referenceId : undefined;
+
     return {
       paymentId: payment.id,
       orderId: order.id,
       amount: order.total,
       method: dto.method,
-      ...result,
+      checkout_url: checkoutUrl,
+      tx_ref: txRef,
     };
   }
 
@@ -421,6 +440,60 @@ export class PaymentsService {
             status: order.payment.status,
           }
         : null,
+    };
+  }
+
+  // Complete test payment (only works when Chapa is in test mode)
+  async completeTestPayment(userId: string, paymentId: string) {
+    const chapaKey = this.configService.get<string>('CHAPA_SECRET_KEY') || '';
+
+    // Only allow in test mode
+    if (chapaKey && !chapaKey.includes('TEST')) {
+      throw new BadRequestException('Test payments only allowed in test mode');
+    }
+
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { order: true },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    if (payment.order.userId !== userId) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    if (payment.status === 'COMPLETED') {
+      return { success: true, message: 'Payment already completed', order: payment.order };
+    }
+
+    // Mark payment and order as completed
+    await this.prisma.$transaction([
+      this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'COMPLETED',
+          providerRef: `TEST-${Date.now()}`,
+        },
+      }),
+      this.prisma.order.update({
+        where: { id: payment.orderId },
+        data: {
+          status: 'PAID',
+          paymentMethod: 'CHAPA',
+          paymentRef: `TEST-${Date.now()}`,
+        },
+      }),
+    ]);
+
+    console.log(`✅ Test payment completed: ${paymentId}`);
+
+    return {
+      success: true,
+      message: 'Test payment completed successfully',
+      orderId: payment.orderId,
     };
   }
 }

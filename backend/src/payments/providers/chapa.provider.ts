@@ -62,11 +62,15 @@ export class ChapaProvider {
   async initiatePayment(
     request: ChapaPaymentRequest,
   ): Promise<ChapaPaymentResponse> {
-    if (!this.secretKey) {
-      console.warn('⚠️ Chapa not configured - returning mock response');
+    // Test mode - skip real payment and redirect to return URL with success simulation
+    if (!this.secretKey || this.secretKey.includes('TEST')) {
+      console.log('💳 Test mode payment - redirecting to success page');
+      // In test mode, redirect to the return URL which will verify and mark as paid
+      // The frontend will handle showing a "test payment" message
+      const testCheckoutUrl = `${request.return_url}?test_payment=true&tx_ref=${request.tx_ref}`;
       return {
         success: true,
-        checkout_url: `https://checkout.chapa.co/mock/${request.tx_ref}`,
+        checkout_url: testCheckoutUrl,
         tx_ref: request.tx_ref,
       };
     }

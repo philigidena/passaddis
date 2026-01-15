@@ -73,4 +73,14 @@ export class PaymentsController {
   ) {
     return this.paymentsService.verifyChapaPayment(userId, orderId);
   }
+
+  // Complete test payment (only works in test mode)
+  @UseGuards(JwtAuthGuard)
+  @Post('test/complete/:paymentId')
+  async completeTestPayment(
+    @CurrentUser('id') userId: string,
+    @Param('paymentId') paymentId: string,
+  ) {
+    return this.paymentsService.completeTestPayment(userId, paymentId);
+  }
 }

@@ -305,6 +305,11 @@ export const paymentsApi = {
     handleResponse<{ verified: boolean; status: string; order: { id: string; status: string } }>(
       api.get(`/payments/verify/${orderId}`)
     ),
+
+  completeTestPayment: (paymentId: string) =>
+    handleResponse<{ success: boolean; message: string; orderId: string }>(
+      api.post(`/payments/test/complete/${paymentId}`)
+    ),
 };
 
 // ============== SHOP API ==============

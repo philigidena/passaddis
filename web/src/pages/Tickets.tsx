@@ -1,17 +1,49 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, MapPin, Ticket, QrCode, Loader2, ArrowRight, Gift, X } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/Button';
 import { useTickets } from '@/hooks/useTickets';
 import { useAuth } from '@/context/AuthContext';
-import { ticketsApi } from '@/lib/api';
+import { ticketsApi, paymentsApi } from '@/lib/api';
 import type { Ticket as TicketType } from '@/types';
 import clsx from 'clsx';
 
 export function TicketsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { tickets, isLoading, error, refetch } = useTickets();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [testPaymentProcessed, setTestPaymentProcessed] = useState(false);
+  const [testPaymentMessage, setTestPaymentMessage] = useState('');
+
+  // Handle test payment redirect
+  useEffect(() => {
+    const testPayment = searchParams.get('test_payment');
+    const txRef = searchParams.get('tx_ref');
+
+    if (testPayment === 'true' && txRef && !testPaymentProcessed) {
+      setTestPaymentProcessed(true);
+      // Clear the URL params
+      setSearchParams({});
+
+      // Complete the test payment
+      const completePayment = async () => {
+        setTestPaymentMessage('Processing test payment...');
+        const result = await paymentsApi.completeTestPayment(txRef);
+        if (result.data?.success) {
+          setTestPaymentMessage('Test payment successful! Your tickets are ready.');
+          // Refetch tickets to show the new ones
+          setTimeout(() => {
+            refetch();
+            setTestPaymentMessage('');
+          }, 2000);
+        } else {
+          setTestPaymentMessage(result.error || 'Payment processing failed');
+        }
+      };
+      completePayment();
+    }
+  }, [searchParams, testPaymentProcessed, setSearchParams, refetch]);
 
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [claimCode, setClaimCode] = useState('');
@@ -75,6 +107,18 @@ export function TicketsPage() {
   return (
     <Layout>
       <div className="min-h-screen bg-dark-bg">
+        {/* Test Payment Message */}
+        {testPaymentMessage && (
+          <div className="bg-primary/20 border-b border-primary/30">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+              <div className="flex items-center gap-3 text-primary">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>{testPaymentMessage}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="bg-dark-card border-b border-white/5">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
