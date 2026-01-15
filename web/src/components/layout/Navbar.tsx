@@ -14,22 +14,35 @@ export function Navbar() {
     navigate('/');
   };
 
-  // Get dashboard link based on role
-  const getDashboardLink = () => {
-    if (!user) return null;
+  // Get dashboard links based on role
+  const getDashboardLinks = () => {
+    if (!user) return [];
     switch (user.role) {
       case 'ADMIN':
-        return { path: '/admin', label: 'Admin Panel', icon: LayoutDashboard };
+        return [
+          { path: '/admin', label: 'Admin Panel', icon: LayoutDashboard },
+          { path: '/organizer', label: 'Organizer Portal', icon: Building2 },
+          { path: '/shop-owner', label: 'Shop Dashboard', icon: Store },
+        ];
       case 'ORGANIZER':
-        return { path: '/organizer', label: 'Organizer Portal', icon: Building2 };
+        return [
+          { path: '/organizer', label: 'Organizer Portal', icon: Building2 },
+          { path: '/shop-owner', label: 'Become Shop Owner', icon: Store },
+        ];
       case 'SHOP_OWNER':
-        return { path: '/shop-owner', label: 'Shop Dashboard', icon: Store };
+        return [
+          { path: '/shop-owner', label: 'Shop Dashboard', icon: Store },
+          { path: '/organizer', label: 'Become Organizer', icon: Building2 },
+        ];
       default:
-        return { path: '/organizer', label: 'Become Organizer', icon: Building2 };
+        return [
+          { path: '/organizer', label: 'Become Organizer', icon: Building2 },
+          { path: '/shop-owner', label: 'Become Shop Owner', icon: Store },
+        ];
     }
   };
 
-  const dashboardLink = getDashboardLink();
+  const dashboardLinks = getDashboardLinks();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass">
@@ -69,15 +82,16 @@ export function Navbar() {
                 My Tickets
               </Link>
             )}
-            {isAuthenticated && dashboardLink && (
+            {isAuthenticated && dashboardLinks.map((link, index) => (
               <Link
-                to={dashboardLink.path}
+                key={index}
+                to={link.path}
                 className="text-white/70 hover:text-white transition-colors flex items-center gap-2"
               >
-                <dashboardLink.icon className="w-4 h-4" />
-                {dashboardLink.label}
+                <link.icon className="w-4 h-4" />
+                {link.label}
               </Link>
-            )}
+            ))}
           </div>
 
           {/* Auth Buttons */}
@@ -165,15 +179,16 @@ export function Navbar() {
               >
                 Shop Orders
               </Link>
-              {dashboardLink && (
+              {dashboardLinks.map((link, index) => (
                 <Link
-                  to={dashboardLink.path}
+                  key={index}
+                  to={link.path}
                   className="block text-white/70 hover:text-white transition-colors"
                   onClick={() => setIsOpen(false)}
                 >
-                  {dashboardLink.label}
+                  {link.label}
                 </Link>
-              )}
+              ))}
               <Link
                 to="/profile"
                 className="block text-white/70 hover:text-white transition-colors"
