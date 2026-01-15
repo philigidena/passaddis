@@ -314,6 +314,21 @@ export const shopApi = {
 
   getCategories: () => apiFetch<string[]>('/shop/categories'),
 
+  getCuratedItems: () => apiFetch<ShopItem[]>('/shop/items/curated'),
+
+  getFeaturedItems: () => apiFetch<ShopItem[]>('/shop/items/featured'),
+
+  getEventItems: (eventId: string) => apiFetch<ShopItem[]>(`/shop/items/event/${eventId}`),
+
+  getPickupLocations: () => apiFetch<Array<{
+    id: string;
+    name: string;
+    area: string;
+    address: string;
+    hours: string;
+    isActive: boolean;
+  }>>('/shop/pickup-locations'),
+
   createOrder: (items: Array<{ shopItemId: string; quantity: number }>, pickupLocationId: string) =>
     apiFetch<{ order: ShopOrder; paymentRequired: number }>('/shop/orders', {
       method: 'POST',
@@ -323,6 +338,12 @@ export const shopApi = {
   getMyOrders: () => apiFetch<ShopOrder[]>('/shop/orders'),
 
   getOrder: (id: string) => apiFetch<ShopOrder>(`/shop/orders/${id}`),
+
+  cancelOrder: (id: string, reason: string) =>
+    apiFetch<ShopOrder>(`/shop-owner/orders/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
 };
 
 // Health check

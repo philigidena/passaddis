@@ -211,6 +211,8 @@ model Merchant {
   events          Event[]
   settlements     Settlement[]
   walletTransactions WalletTransaction[]
+  shopItems       ShopItem[]
+  orders          Order[]        // Shop orders for this merchant
 
   @@map("merchants")
 }
@@ -341,6 +343,7 @@ model Event {
   tickets       Ticket[]
   promoCodes    PromoCode[]
   waitlist      Waitlist[]
+  shopItems     ShopItem[]
 
   @@map("events")
 }
@@ -454,11 +457,33 @@ model ShopItem {
   imageUrl    String?
   category    ShopCategory
   inStock     Boolean  @default(true)
+  stockQuantity Int    @default(0)         // Actual stock count
+  lowStockThreshold Int @default(10)       // Alert when below this
+  sku         String?  @unique             // Product SKU
+
+  // Curated/Featured items
+  isCurated   Boolean  @default(false)     // Shop owner's curated selection
+  isFeatured  Boolean  @default(false)     // Featured on homepage
+  displayOrder Int     @default(0)         // Order in curated list
+  badge       String?                       // "Best Seller", "New", "Popular"
+
+  // Event-specific items
+  eventId     String?
+  event       Event?   @relation(fields: [eventId], references: [id])
+
+  // Shop/Merchant ownership
+  merchantId  String?
+  merchant    Merchant? @relation(fields: [merchantId], references: [id])
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   orderItems  OrderItem[]
 
+  @@index([merchantId])
+  @@index([eventId])
+  @@index([category])
+  @@index([isCurated])
   @@map("shop_items")
 }
 
@@ -467,6 +492,7 @@ enum ShopCategory {
   DRINKS
   SNACKS
   MERCH
+  BUNDLES        // For promotional bundles
 }
 
 model PickupLocation {
@@ -482,6 +508,47 @@ model PickupLocation {
   orders    Order[]
 
   @@map("pickup_locations")
+}
+
+// ============== BUNDLES ==============
+
+model Bundle {
+  id           String       @id @default(uuid())
+  name         String
+  description  String?
+  originalPrice Float       // Sum of individual prices
+  bundlePrice  Float        // Discounted bundle price
+  savings      Float        // originalPrice - bundlePrice
+  imageUrl     String?
+  isActive     Boolean      @default(true)
+  isFeatured   Boolean      @default(false)
+  validFrom    DateTime?
+  validUntil   DateTime?
+  maxQuantity  Int?         // Max bundles available
+  soldCount    Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Optional: limit to specific event
+  eventId      String?
+
+  items        BundleItem[]
+
+  @@index([eventId])
+  @@index([isActive])
+  @@map("bundles")
+}
+
+model BundleItem {
+  id          String   @id @default(uuid())
+  quantity    Int      @default(1)
+
+  bundle      Bundle   @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  bundleId    String
+  shopItemId  String?
+  ticketTypeId String?
+
+  @@map("bundle_items")
 }
 
 // ============== ORDERS ==============
@@ -500,6 +567,15 @@ model Order {
   qrCode          String?       @unique
   pickedUpAt      DateTime?
   settledAt       DateTime?     // When merchant was paid
+
+  // Cancellation support
+  cancelledAt     DateTime?
+  cancelledBy     String?       // 'user', 'admin', or 'system'
+  cancellationReason String?
+  refundStatus    RefundStatus?
+  refundAmount    Float?
+  refundedAt      DateTime?
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -508,10 +584,18 @@ model Order {
   pickupLocation  PickupLocation? @relation(fields: [pickupLocationId], references: [id])
   pickupLocationId String?
 
+  // Direct merchant relationship for shop orders
+  merchant        Merchant?     @relation(fields: [merchantId], references: [id])
+  merchantId      String?
+
   tickets         Ticket[]
   items           OrderItem[]
   payment         Payment?
 
+  @@index([userId])
+  @@index([status])
+  @@index([merchantId])
+  @@index([createdAt])
   @@map("orders")
 }
 
@@ -524,10 +608,18 @@ enum OrderStatus {
   REFUNDED
 }
 
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model OrderItem {
   id        String   @id @default(uuid())
   quantity  Int
-  price     Float
+  price     Float          // Unit price at time of purchase
+  subtotal  Float          // quantity * price
   createdAt DateTime @default(now())
 
   order     Order    @relation(fields: [orderId], references: [id])
@@ -535,6 +627,8 @@ model OrderItem {
   shopItem  ShopItem @relation(fields: [shopItemId], references: [id])
   shopItemId String
 
+  @@index([orderId])
+  @@index([shopItemId])
   @@map("order_items")
 }
 

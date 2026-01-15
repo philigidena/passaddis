@@ -16,24 +16,144 @@ import * as QRCode from 'qrcode';
 export class ShopService {
   constructor(private prisma: PrismaService) {}
 
-  // Get all shop items
+  // Get all shop items (only from active merchants)
   async getItems(query: ShopItemQueryDto) {
-    const where: any = { inStock: true };
+    const where: any = {
+      inStock: true,
+      // Only show items from active merchants or items without a merchant (admin-created)
+      OR: [
+        { merchantId: null },
+        {
+          merchant: {
+            status: 'ACTIVE',
+          },
+        },
+      ],
+    };
 
     if (query.category) {
       where.category = query.category;
     }
 
     if (query.search) {
-      where.OR = [
-        { name: { contains: query.search, mode: 'insensitive' } },
-        { description: { contains: query.search, mode: 'insensitive' } },
+      where.AND = [
+        {
+          OR: [
+            { name: { contains: query.search, mode: 'insensitive' } },
+            { description: { contains: query.search, mode: 'insensitive' } },
+          ],
+        },
       ];
     }
 
     return this.prisma.shopItem.findMany({
       where,
-      orderBy: { name: 'asc' },
+      orderBy: [
+        { isFeatured: 'desc' },
+        { isCurated: 'desc' },
+        { displayOrder: 'asc' },
+        { name: 'asc' },
+      ],
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        imageUrl: true,
+        category: true,
+        inStock: true,
+        stockQuantity: true,
+        isCurated: true,
+        isFeatured: true,
+        badge: true,
+        eventId: true,
+        merchantId: true,
+      },
+    });
+  }
+
+  // Get curated items (featured selection, only from active merchants)
+  async getCuratedItems() {
+    return this.prisma.shopItem.findMany({
+      where: {
+        inStock: true,
+        isCurated: true,
+        OR: [
+          { merchantId: null },
+          { merchant: { status: 'ACTIVE' } },
+        ],
+      },
+      orderBy: [
+        { displayOrder: 'asc' },
+        { name: 'asc' },
+      ],
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        imageUrl: true,
+        category: true,
+        inStock: true,
+        badge: true,
+        merchantId: true,
+      },
+    });
+  }
+
+  // Get featured items (only from active merchants)
+  async getFeaturedItems() {
+    return this.prisma.shopItem.findMany({
+      where: {
+        inStock: true,
+        isFeatured: true,
+        OR: [
+          { merchantId: null },
+          { merchant: { status: 'ACTIVE' } },
+        ],
+      },
+      orderBy: { displayOrder: 'asc' },
+      take: 6,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        imageUrl: true,
+        category: true,
+        badge: true,
+        merchantId: true,
+      },
+    });
+  }
+
+  // Get event-specific items (only from active merchants)
+  async getEventItems(eventId: string) {
+    return this.prisma.shopItem.findMany({
+      where: {
+        inStock: true,
+        eventId,
+        OR: [
+          { merchantId: null },
+          { merchant: { status: 'ACTIVE' } },
+        ],
+      },
+      orderBy: [
+        { isCurated: 'desc' },
+        { displayOrder: 'asc' },
+        { name: 'asc' },
+      ],
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        imageUrl: true,
+        category: true,
+        inStock: true,
+        badge: true,
+        merchantId: true,
+      },
     });
   }
 
@@ -60,15 +180,22 @@ export class ShopService {
 
     // Validate items and calculate totals
     let subtotal = 0;
+    let merchantId: string | null = null;
     const orderItems: Array<{
       shopItemId: string;
       quantity: number;
       price: number;
+      subtotal: number;
     }> = [];
 
     for (const item of items) {
       const shopItem = await this.prisma.shopItem.findUnique({
         where: { id: item.shopItemId },
+        include: {
+          merchant: {
+            select: { id: true, status: true },
+          },
+        },
       });
 
       if (!shopItem) {
@@ -79,11 +206,25 @@ export class ShopService {
         throw new BadRequestException(`${shopItem.name} is out of stock`);
       }
 
-      subtotal += shopItem.price * item.quantity;
+      // Verify merchant is active if item has a merchant
+      if (shopItem.merchant && shopItem.merchant.status !== 'ACTIVE') {
+        throw new BadRequestException(
+          `${shopItem.name} is not currently available for purchase`,
+        );
+      }
+
+      // Set merchantId from first item with a merchant (all items should be from same merchant ideally)
+      if (shopItem.merchantId && !merchantId) {
+        merchantId = shopItem.merchantId;
+      }
+
+      const itemSubtotal = shopItem.price * item.quantity;
+      subtotal += itemSubtotal;
       orderItems.push({
         shopItemId: shopItem.id,
         quantity: item.quantity,
         price: shopItem.price,
+        subtotal: itemSubtotal,
       });
     }
 
@@ -101,6 +242,7 @@ export class ShopService {
         orderNumber,
         userId,
         pickupLocationId,
+        merchantId, // Link order to merchant
         subtotal,
         serviceFee,
         total,
@@ -111,6 +253,7 @@ export class ShopService {
             shopItemId: item.shopItemId,
             quantity: item.quantity,
             price: item.price,
+            subtotal: item.subtotal,
           })),
         },
       },
@@ -121,6 +264,12 @@ export class ShopService {
           },
         },
         pickupLocation: true,
+        merchant: {
+          select: {
+            businessName: true,
+            tradeName: true,
+          },
+        },
       },
     });
 

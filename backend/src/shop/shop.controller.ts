@@ -33,6 +33,24 @@ export class ShopController {
   }
 
   @Public()
+  @Get('items/curated')
+  async getCuratedItems() {
+    return this.shopService.getCuratedItems();
+  }
+
+  @Public()
+  @Get('items/featured')
+  async getFeaturedItems() {
+    return this.shopService.getFeaturedItems();
+  }
+
+  @Public()
+  @Get('items/event/:eventId')
+  async getEventItems(@Param('eventId') eventId: string) {
+    return this.shopService.getEventItems(eventId);
+  }
+
+  @Public()
   @Get('pickup-locations')
   async getPickupLocations() {
     return this.shopService.getPickupLocations();

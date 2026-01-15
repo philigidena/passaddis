@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -17,6 +18,13 @@ import {
   CreateShopOwnerProfileDto,
   UpdateShopOwnerProfileDto,
   UpdateOrderStatusDto,
+  CreateShopItemDto,
+  UpdateShopItemDto,
+  ShopItemQueryDto,
+  UpdateStockDto,
+  BulkUpdateCuratedDto,
+  ReorderCuratedItemsDto,
+  CancelOrderDto,
 } from './dto/shop-owner.dto';
 
 @Controller('shop-owner')
@@ -113,5 +121,118 @@ export class ShopOwnerController {
     @Query('period') period: 'week' | 'month' | 'year' = 'month',
   ) {
     return this.shopOwnerService.getSalesAnalytics(userId, period);
+  }
+
+  // ==================== SHOP ITEM MANAGEMENT ====================
+
+  @Get('items')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
+  async getShopItems(
+    @CurrentUser('id') userId: string,
+    @Query() query: ShopItemQueryDto,
+  ) {
+    return this.shopOwnerService.getShopItems(userId, query);
+  }
+
+  @Get('items/curated')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
+  async getCuratedItems(@CurrentUser('id') userId: string) {
+    return this.shopOwnerService.getCuratedItems(userId);
+  }
+
+  @Get('items/low-stock')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
+  async getLowStockItems(@CurrentUser('id') userId: string) {
+    return this.shopOwnerService.getLowStockItems(userId);
+  }
+
+  @Get('items/:id')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
+  async getShopItem(
+    @CurrentUser('id') userId: string,
+    @Param('id') itemId: string,
+  ) {
+    return this.shopOwnerService.getShopItem(userId, itemId);
+  }
+
+  @Post('items')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
+  async createShopItem(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateShopItemDto,
+  ) {
+    return this.shopOwnerService.createShopItem(userId, dto);
+  }
+
+  @Patch('items/:id')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
+  async updateShopItem(
+    @CurrentUser('id') userId: string,
+    @Param('id') itemId: string,
+    @Body() dto: UpdateShopItemDto,
+  ) {
+    return this.shopOwnerService.updateShopItem(userId, itemId, dto);
+  }
+
+  @Delete('items/:id')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
+  async deleteShopItem(
+    @CurrentUser('id') userId: string,
+    @Param('id') itemId: string,
+  ) {
+    return this.shopOwnerService.deleteShopItem(userId, itemId);
+  }
+
+  // ==================== CURATED ITEMS ====================
+
+  @Post('items/curated')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
+  async updateCuratedStatus(
+    @CurrentUser('id') userId: string,
+    @Body() dto: BulkUpdateCuratedDto,
+  ) {
+    return this.shopOwnerService.updateCuratedStatus(userId, dto);
+  }
+
+  @Post('items/curated/reorder')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
+  async reorderCuratedItems(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ReorderCuratedItemsDto,
+  ) {
+    return this.shopOwnerService.reorderCuratedItems(userId, dto);
+  }
+
+  // ==================== STOCK MANAGEMENT ====================
+
+  @Patch('items/:id/stock')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
+  async updateStock(
+    @CurrentUser('id') userId: string,
+    @Param('id') itemId: string,
+    @Body() dto: UpdateStockDto,
+  ) {
+    return this.shopOwnerService.updateStock(userId, itemId, dto);
+  }
+
+  // ==================== ORDER CANCELLATION ====================
+
+  @Post('orders/:id/cancel')
+  async cancelOrder(
+    @CurrentUser('id') userId: string,
+    @Param('id') orderId: string,
+    @Body() dto: CancelOrderDto,
+  ) {
+    return this.shopOwnerService.cancelOrder(userId, orderId, dto.reason);
   }
 }

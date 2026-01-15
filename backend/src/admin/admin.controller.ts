@@ -26,6 +26,10 @@ import {
   UpdateShopItemDto,
   CreatePickupLocationDto,
   UpdatePickupLocationDto,
+  ShopOwnerQueryDto,
+  ApproveShopOwnerDto,
+  RejectShopOwnerDto,
+  SuspendShopOwnerDto,
 } from './dto/admin.dto';
 
 @Controller('admin')
@@ -119,6 +123,49 @@ export class AdminController {
     @Body('reason') reason: string,
   ) {
     return this.adminService.suspendOrganizer(id, reason);
+  }
+
+  // ==================== SHOP OWNER MANAGEMENT ====================
+
+  @Get('shop-owners')
+  async getShopOwners(@Query() query: ShopOwnerQueryDto) {
+    return this.adminService.getShopOwners(query);
+  }
+
+  @Get('shop-owners/:id')
+  async getShopOwner(@Param('id') id: string) {
+    return this.adminService.getShopOwner(id);
+  }
+
+  @Post('shop-owners/:id/approve')
+  async approveShopOwner(
+    @Param('id') id: string,
+    @CurrentUser('id') adminId: string,
+    @Body() dto: ApproveShopOwnerDto,
+  ) {
+    return this.adminService.approveShopOwner(id, adminId, dto);
+  }
+
+  @Post('shop-owners/:id/reject')
+  async rejectShopOwner(
+    @Param('id') id: string,
+    @CurrentUser('id') adminId: string,
+    @Body() dto: RejectShopOwnerDto,
+  ) {
+    return this.adminService.rejectShopOwner(id, adminId, dto);
+  }
+
+  @Post('shop-owners/:id/suspend')
+  async suspendShopOwner(
+    @Param('id') id: string,
+    @Body() dto: SuspendShopOwnerDto,
+  ) {
+    return this.adminService.suspendShopOwner(id, dto);
+  }
+
+  @Post('shop-owners/:id/reactivate')
+  async reactivateShopOwner(@Param('id') id: string) {
+    return this.adminService.reactivateShopOwner(id);
   }
 
   // ==================== SHOP ITEM MANAGEMENT ====================

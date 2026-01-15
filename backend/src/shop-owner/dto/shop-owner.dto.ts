@@ -3,8 +3,13 @@ import {
   IsOptional,
   IsNumber,
   IsBoolean,
+  IsEnum,
+  IsArray,
+  ValidateNested,
   Min,
+  Max,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 // Profile DTOs
 export class CreateShopOwnerProfileDto {
@@ -116,4 +121,187 @@ export interface ShopOwnerDashboardStats {
     soldCount: number;
     revenue: number;
   }>;
+}
+
+// ==================== SHOP ITEM MANAGEMENT ====================
+
+export class CreateShopItemDto {
+  @IsString()
+  name: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsNumber()
+  @Min(0)
+  price: number;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsEnum(['WATER', 'DRINKS', 'SNACKS', 'MERCH', 'BUNDLES'])
+  category: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  stockQuantity?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  lowStockThreshold?: number;
+
+  @IsOptional()
+  @IsString()
+  sku?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isCurated?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isFeatured?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  displayOrder?: number;
+
+  @IsOptional()
+  @IsString()
+  badge?: string;
+
+  @IsOptional()
+  @IsString()
+  eventId?: string;
+}
+
+export class UpdateShopItemDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  price?: number;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsEnum(['WATER', 'DRINKS', 'SNACKS', 'MERCH', 'BUNDLES'])
+  category?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  inStock?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  stockQuantity?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  lowStockThreshold?: number;
+
+  @IsOptional()
+  @IsString()
+  sku?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isCurated?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isFeatured?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  displayOrder?: number;
+
+  @IsOptional()
+  @IsString()
+  badge?: string;
+
+  @IsOptional()
+  @IsString()
+  eventId?: string;
+}
+
+export class ShopItemQueryDto {
+  @IsOptional()
+  @IsEnum(['WATER', 'DRINKS', 'SNACKS', 'MERCH', 'BUNDLES'])
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  curatedOnly?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  inStockOnly?: boolean;
+
+  @IsOptional()
+  @IsString()
+  eventId?: string;
+}
+
+export class UpdateStockDto {
+  @IsNumber()
+  @Min(0)
+  stockQuantity: number;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class BulkUpdateCuratedDto {
+  @IsArray()
+  @IsString({ each: true })
+  itemIds: string[];
+
+  @IsBoolean()
+  isCurated: boolean;
+}
+
+export class ReorderCuratedItemsDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ItemOrderDto)
+  items: ItemOrderDto[];
+}
+
+export class ItemOrderDto {
+  @IsString()
+  id: string;
+
+  @IsNumber()
+  @Min(0)
+  displayOrder: number;
+}
+
+// ==================== ORDER CANCELLATION ====================
+
+export class CancelOrderDto {
+  @IsString()
+  reason: string;
 }

@@ -9,11 +9,57 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateShopOwnerProfileDto,
   UpdateShopOwnerProfileDto,
+  CreateShopItemDto,
+  UpdateShopItemDto,
+  ShopItemQueryDto,
+  UpdateStockDto,
+  BulkUpdateCuratedDto,
+  ReorderCuratedItemsDto,
 } from './dto/shop-owner.dto';
 
 @Injectable()
 export class ShopOwnerService {
   constructor(private prisma: PrismaService) {}
+
+  // ==================== HELPER: VERIFY MERCHANT STATUS ====================
+
+  private async getVerifiedMerchant(userId: string, requireActive = false) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Shop owner profile not found. Please create one first.');
+    }
+
+    if (requireActive) {
+      if (merchant.status === 'PENDING') {
+        throw new ForbiddenException(
+          'Your shop owner account is pending approval. Please wait for admin verification.',
+        );
+      }
+
+      if (merchant.status === 'SUSPENDED') {
+        throw new ForbiddenException(
+          'Your shop owner account has been suspended. Please contact support for assistance.',
+        );
+      }
+
+      if (merchant.status === 'BLOCKED') {
+        throw new ForbiddenException(
+          'Your shop owner account has been blocked. Please contact support for assistance.',
+        );
+      }
+
+      if (merchant.status !== 'ACTIVE') {
+        throw new ForbiddenException(
+          `Your shop owner account is not active. Current status: ${merchant.status}`,
+        );
+      }
+    }
+
+    return merchant;
+  }
 
   // ==================== PROFILE MANAGEMENT ====================
 
@@ -98,42 +144,36 @@ export class ShopOwnerService {
   // ==================== DASHBOARD ====================
 
   async getDashboard(userId: string) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { userId },
-    });
-
-    if (!merchant) {
-      throw new NotFoundException('Shop owner profile not found. Please create one first.');
-    }
+    // Don't require active status for viewing dashboard (so pending users can see their status)
+    const merchant = await this.getVerifiedMerchant(userId, false);
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
 
-    // Get order stats - For now, we'll get all shop orders
-    // In a real scenario, orders would be linked to specific merchants
+    // Get order stats - using direct merchantId relationship
     const orderStats = await this.prisma.order.groupBy({
       by: ['status'],
       where: {
-        items: { some: {} }, // Orders with shop items
+        merchantId: merchant.id,
       },
       _count: true,
     });
 
-    // Get revenue stats
+    // Get revenue stats - using direct merchantId relationship
     const totalRevenue = await this.prisma.order.aggregate({
       where: {
+        merchantId: merchant.id,
         status: { in: ['PAID', 'COMPLETED', 'READY_FOR_PICKUP'] },
-        items: { some: {} },
       },
       _sum: { total: true },
     });
 
     const monthlyRevenue = await this.prisma.order.aggregate({
       where: {
+        merchantId: merchant.id,
         status: { in: ['PAID', 'COMPLETED', 'READY_FOR_PICKUP'] },
-        items: { some: {} },
         createdAt: { gte: startOfMonth },
       },
       _sum: { total: true },
@@ -141,8 +181,8 @@ export class ShopOwnerService {
 
     const weeklyRevenue = await this.prisma.order.aggregate({
       where: {
+        merchantId: merchant.id,
         status: { in: ['PAID', 'COMPLETED', 'READY_FOR_PICKUP'] },
-        items: { some: {} },
         createdAt: { gte: startOfWeek },
       },
       _sum: { total: true },
@@ -224,16 +264,12 @@ export class ShopOwnerService {
   // ==================== ORDER MANAGEMENT ====================
 
   async getOrders(userId: string, status?: string) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { userId },
-    });
-
-    if (!merchant) {
-      throw new NotFoundException('Shop owner profile not found');
-    }
+    // Require active status to view orders
+    const merchant = await this.getVerifiedMerchant(userId, true);
 
     const where: any = {
-      items: { some: {} }, // Orders with shop items
+      // Use direct merchantId relationship
+      merchantId: merchant.id,
     };
 
     if (status) {
@@ -275,13 +311,8 @@ export class ShopOwnerService {
   }
 
   async getOrder(userId: string, orderId: string) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { userId },
-    });
-
-    if (!merchant) {
-      throw new NotFoundException('Shop owner profile not found');
-    }
+    // Require active status to view order details
+    await this.getVerifiedMerchant(userId, true);
 
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -316,13 +347,8 @@ export class ShopOwnerService {
     orderId: string,
     status: 'READY_FOR_PICKUP' | 'COMPLETED',
   ) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { userId },
-    });
-
-    if (!merchant) {
-      throw new NotFoundException('Shop owner profile not found');
-    }
+    // Require active merchant to update order status
+    const merchant = await this.getVerifiedMerchant(userId, true);
 
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -371,13 +397,8 @@ export class ShopOwnerService {
   // ==================== VALIDATE PICKUP ====================
 
   async validatePickup(userId: string, qrCode: string) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { userId },
-    });
-
-    if (!merchant) {
-      throw new NotFoundException('Shop owner profile not found');
-    }
+    // Require active merchant to validate pickups
+    await this.getVerifiedMerchant(userId, true);
 
     const order = await this.prisma.order.findUnique({
       where: { qrCode },
@@ -458,13 +479,8 @@ export class ShopOwnerService {
   // ==================== ANALYTICS ====================
 
   async getSalesAnalytics(userId: string, period: 'week' | 'month' | 'year') {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { userId },
-    });
-
-    if (!merchant) {
-      throw new NotFoundException('Shop owner profile not found');
-    }
+    // Require active status to view analytics
+    await this.getVerifiedMerchant(userId, true);
 
     const now = new Date();
     let startDate: Date;
@@ -523,5 +539,378 @@ export class ShopOwnerService {
         ...data,
       })),
     };
+  }
+
+  // ==================== SHOP ITEM MANAGEMENT ====================
+
+  async getShopItems(userId: string, query: ShopItemQueryDto) {
+    // Don't require active status for viewing items (so pending users can view their items)
+    const merchant = await this.getVerifiedMerchant(userId, false);
+
+    const where: any = {
+      merchantId: merchant.id,
+    };
+
+    if (query.category) {
+      where.category = query.category;
+    }
+
+    if (query.curatedOnly) {
+      where.isCurated = true;
+    }
+
+    if (query.inStockOnly) {
+      where.inStock = true;
+    }
+
+    if (query.eventId) {
+      where.eventId = query.eventId;
+    }
+
+    if (query.search) {
+      where.OR = [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { description: { contains: query.search, mode: 'insensitive' } },
+        { sku: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
+    return this.prisma.shopItem.findMany({
+      where,
+      orderBy: [
+        { isCurated: 'desc' },
+        { displayOrder: 'asc' },
+        { name: 'asc' },
+      ],
+      include: {
+        event: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
+    });
+  }
+
+  async getShopItem(userId: string, itemId: string) {
+    // Don't require active status for viewing item details
+    const merchant = await this.getVerifiedMerchant(userId, false);
+
+    const item = await this.prisma.shopItem.findUnique({
+      where: { id: itemId },
+      include: {
+        event: true,
+        orderItems: {
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            order: {
+              select: {
+                orderNumber: true,
+                status: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Shop item not found');
+    }
+
+    if (item.merchantId !== merchant.id) {
+      throw new ForbiddenException('You do not own this item');
+    }
+
+    return item;
+  }
+
+  async createShopItem(userId: string, dto: CreateShopItemDto) {
+    // Require active merchant to create items
+    const merchant = await this.getVerifiedMerchant(userId, true);
+
+    // Check for duplicate SKU if provided
+    if (dto.sku) {
+      const existingSku = await this.prisma.shopItem.findUnique({
+        where: { sku: dto.sku },
+      });
+      if (existingSku) {
+        throw new ConflictException('SKU already exists');
+      }
+    }
+
+    // Auto-calculate inStock based on stockQuantity
+    const inStock = dto.stockQuantity ? dto.stockQuantity > 0 : true;
+
+    return this.prisma.shopItem.create({
+      data: {
+        name: dto.name,
+        description: dto.description,
+        price: dto.price,
+        imageUrl: dto.imageUrl,
+        category: dto.category as any,
+        stockQuantity: dto.stockQuantity || 0,
+        lowStockThreshold: dto.lowStockThreshold || 10,
+        sku: dto.sku,
+        isCurated: dto.isCurated || false,
+        isFeatured: dto.isFeatured || false,
+        displayOrder: dto.displayOrder || 0,
+        badge: dto.badge,
+        eventId: dto.eventId,
+        merchantId: merchant.id,
+        inStock,
+      },
+    });
+  }
+
+  async updateShopItem(userId: string, itemId: string, dto: UpdateShopItemDto) {
+    // Require active merchant to update items
+    const merchant = await this.getVerifiedMerchant(userId, true);
+
+    const item = await this.prisma.shopItem.findUnique({
+      where: { id: itemId },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Shop item not found');
+    }
+
+    if (item.merchantId !== merchant.id) {
+      throw new ForbiddenException('You do not own this item');
+    }
+
+    // Check for duplicate SKU if changing
+    if (dto.sku && dto.sku !== item.sku) {
+      const existingSku = await this.prisma.shopItem.findUnique({
+        where: { sku: dto.sku },
+      });
+      if (existingSku) {
+        throw new ConflictException('SKU already exists');
+      }
+    }
+
+    // Auto-update inStock if stockQuantity is provided
+    const updateData: any = { ...dto };
+    if (dto.stockQuantity !== undefined) {
+      updateData.inStock = dto.stockQuantity > 0;
+    }
+
+    return this.prisma.shopItem.update({
+      where: { id: itemId },
+      data: updateData,
+    });
+  }
+
+  async deleteShopItem(userId: string, itemId: string) {
+    // Require active merchant to delete items
+    const merchant = await this.getVerifiedMerchant(userId, true);
+
+    const item = await this.prisma.shopItem.findUnique({
+      where: { id: itemId },
+      include: {
+        orderItems: { take: 1 },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Shop item not found');
+    }
+
+    if (item.merchantId !== merchant.id) {
+      throw new ForbiddenException('You do not own this item');
+    }
+
+    // Don't delete items that have been ordered
+    if (item.orderItems.length > 0) {
+      // Instead of deleting, mark as out of stock
+      return this.prisma.shopItem.update({
+        where: { id: itemId },
+        data: {
+          inStock: false,
+          stockQuantity: 0,
+        },
+      });
+    }
+
+    return this.prisma.shopItem.delete({
+      where: { id: itemId },
+    });
+  }
+
+  // ==================== CURATED ITEMS MANAGEMENT ====================
+
+  async getCuratedItems(userId: string) {
+    // Don't require active status for viewing curated items
+    const merchant = await this.getVerifiedMerchant(userId, false);
+
+    return this.prisma.shopItem.findMany({
+      where: {
+        merchantId: merchant.id,
+        isCurated: true,
+      },
+      orderBy: { displayOrder: 'asc' },
+    });
+  }
+
+  async updateCuratedStatus(userId: string, dto: BulkUpdateCuratedDto) {
+    // Require active merchant to manage curated items
+    const merchant = await this.getVerifiedMerchant(userId, true);
+
+    // Verify all items belong to this merchant
+    const items = await this.prisma.shopItem.findMany({
+      where: {
+        id: { in: dto.itemIds },
+        merchantId: merchant.id,
+      },
+    });
+
+    if (items.length !== dto.itemIds.length) {
+      throw new ForbiddenException('Some items do not belong to you');
+    }
+
+    await this.prisma.shopItem.updateMany({
+      where: {
+        id: { in: dto.itemIds },
+        merchantId: merchant.id,
+      },
+      data: {
+        isCurated: dto.isCurated,
+      },
+    });
+
+    return { updated: dto.itemIds.length };
+  }
+
+  async reorderCuratedItems(userId: string, dto: ReorderCuratedItemsDto) {
+    // Require active merchant to reorder items
+    const merchant = await this.getVerifiedMerchant(userId, true);
+
+    // Update display order for each item
+    const updates = dto.items.map((item) =>
+      this.prisma.shopItem.updateMany({
+        where: {
+          id: item.id,
+          merchantId: merchant.id,
+        },
+        data: {
+          displayOrder: item.displayOrder,
+        },
+      }),
+    );
+
+    await Promise.all(updates);
+
+    return { reordered: dto.items.length };
+  }
+
+  // ==================== STOCK MANAGEMENT ====================
+
+  async updateStock(userId: string, itemId: string, dto: UpdateStockDto) {
+    // Require active merchant to update stock
+    const merchant = await this.getVerifiedMerchant(userId, true);
+
+    const item = await this.prisma.shopItem.findUnique({
+      where: { id: itemId },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Shop item not found');
+    }
+
+    if (item.merchantId !== merchant.id) {
+      throw new ForbiddenException('You do not own this item');
+    }
+
+    return this.prisma.shopItem.update({
+      where: { id: itemId },
+      data: {
+        stockQuantity: dto.stockQuantity,
+        inStock: dto.stockQuantity > 0,
+      },
+    });
+  }
+
+  async getLowStockItems(userId: string) {
+    // Don't require active status for viewing low stock items
+    const merchant = await this.getVerifiedMerchant(userId, false);
+
+    // Get items where stockQuantity <= lowStockThreshold
+    return this.prisma.$queryRaw`
+      SELECT * FROM shop_items
+      WHERE merchant_id = ${merchant.id}
+        AND stock_quantity <= low_stock_threshold
+        AND in_stock = true
+      ORDER BY stock_quantity ASC
+    `;
+  }
+
+  // ==================== ORDER CANCELLATION ====================
+
+  async cancelOrder(userId: string, orderId: string, reason: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        payment: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.userId !== userId) {
+      throw new ForbiddenException('You do not own this order');
+    }
+
+    // Can only cancel pending or paid orders (not picked up or completed)
+    if (!['PENDING', 'PAID'].includes(order.status)) {
+      throw new BadRequestException(
+        `Cannot cancel order with status: ${order.status}`,
+      );
+    }
+
+    const updateData: any = {
+      status: 'CANCELLED',
+      cancelledAt: new Date(),
+      cancelledBy: 'user',
+      cancellationReason: reason,
+    };
+
+    // If order was paid, initiate refund
+    if (order.status === 'PAID' && order.payment) {
+      updateData.refundStatus = 'PENDING';
+      updateData.refundAmount = order.total;
+    }
+
+    // Restore stock for cancelled items
+    for (const item of order.items) {
+      await this.prisma.shopItem.update({
+        where: { id: item.shopItemId },
+        data: {
+          stockQuantity: { increment: item.quantity },
+          inStock: true,
+        },
+      });
+    }
+
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data: updateData,
+      include: {
+        items: {
+          include: {
+            shopItem: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
   }
 }

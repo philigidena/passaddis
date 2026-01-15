@@ -13,6 +13,7 @@ import { AdminUsers } from '@/pages/admin/AdminUsers';
 import { AdminOrganizers } from '@/pages/admin/AdminOrganizers';
 import { AdminShop } from '@/pages/admin/AdminShop';
 import { AdminPromos } from '@/pages/admin/AdminPromos';
+import { AdminShopOwners } from '@/pages/admin/AdminShopOwners';
 import { ShopPage } from '@/pages/Shop';
 import { ShopOrdersPage } from '@/pages/ShopOrders';
 import { ShopOrderDetailPage } from '@/pages/ShopOrderDetail';
@@ -23,6 +24,8 @@ import { OrganizerSettings } from '@/pages/organizer/OrganizerSettings';
 import { ShopOwnerDashboard } from '@/pages/shop-owner/ShopOwnerDashboard';
 import { ShopOwnerOrders } from '@/pages/shop-owner/ShopOwnerOrders';
 import { ShopOwnerScan } from '@/pages/shop-owner/ShopOwnerScan';
+import { ShopOwnerItems } from '@/pages/shop-owner/ShopOwnerItems';
+import { ShopOwnerSettings } from '@/pages/shop-owner/ShopOwnerSettings';
 import { ProfilePage } from '@/pages/Profile';
 import type { ReactNode } from 'react';
 
@@ -141,6 +144,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/admin/shop-owners"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <AdminShopOwners />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Organizer Routes */}
       <Route
@@ -194,6 +205,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/shop-owner/items"
+        element={
+          <ProtectedRoute allowedRoles={['SHOP_OWNER', 'ADMIN']}>
+            <ShopOwnerItems />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/shop-owner/orders"
         element={
           <ProtectedRoute allowedRoles={['SHOP_OWNER', 'ADMIN']}>
@@ -221,7 +240,7 @@ function AppRoutes() {
         path="/shop-owner/settings"
         element={
           <ProtectedRoute allowedRoles={['SHOP_OWNER', 'ADMIN', 'USER']}>
-            <ComingSoon title="Shop Owner Settings" />
+            <ShopOwnerSettings />
           </ProtectedRoute>
         }
       />
@@ -268,19 +287,6 @@ function App() {
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>
-  );
-}
-
-// Placeholder components
-function ComingSoon({ title }: { title: string }) {
-  return (
-    <div className="min-h-screen bg-dark-bg flex flex-col items-center justify-center">
-      <h1 className="text-3xl font-bold text-white mb-4">{title}</h1>
-      <p className="text-white/60">Coming soon...</p>
-      <a href="/" className="mt-6 text-primary hover:underline">
-        Go back home
-      </a>
-    </div>
   );
 }
 

@@ -202,6 +202,53 @@ export class UpdatePickupLocationDto {
   isActive?: boolean;
 }
 
+// Shop Owner/Merchant Management DTOs
+export class ShopOwnerQueryDto {
+  @IsOptional()
+  @IsEnum(['PENDING', 'ACTIVE', 'SUSPENDED', 'BLOCKED'])
+  status?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  verified?: boolean;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
+}
+
+export class ApproveShopOwnerDto {
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  commissionRate?: number;
+}
+
+export class RejectShopOwnerDto {
+  @IsString()
+  reason: string;
+}
+
+export class SuspendShopOwnerDto {
+  @IsString()
+  reason: string;
+}
+
 // Dashboard Stats Response
 export interface DashboardStats {
   users: {

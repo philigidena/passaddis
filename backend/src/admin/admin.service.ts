@@ -16,6 +16,10 @@ import {
   UpdateShopItemDto,
   CreatePickupLocationDto,
   UpdatePickupLocationDto,
+  ShopOwnerQueryDto,
+  ApproveShopOwnerDto,
+  RejectShopOwnerDto,
+  SuspendShopOwnerDto,
 } from './dto/admin.dto';
 
 @Injectable()
@@ -38,6 +42,10 @@ export class AdminService {
       eventsThisMonth,
       ticketStats,
       orderStats,
+      // Shop owner stats
+      shopOwnerStats,
+      shopItemStats,
+      shopOrderStats,
     ] = await Promise.all([
       // Total users
       this.prisma.user.count(),
@@ -78,6 +86,29 @@ export class AdminService {
         _sum: { total: true },
         where: { status: 'COMPLETED' },
       }),
+
+      // Shop owner stats (grouped by status)
+      this.prisma.merchant.groupBy({
+        by: ['status'],
+        where: { type: 'SHOP' },
+        _count: true,
+      }),
+
+      // Shop item stats
+      this.prisma.shopItem.aggregate({
+        _count: true,
+        where: { inStock: true },
+      }),
+
+      // Shop order stats (orders with merchantId = shop orders)
+      this.prisma.order.aggregate({
+        _count: true,
+        _sum: { total: true },
+        where: {
+          merchantId: { not: null },
+          status: { in: ['PAID', 'COMPLETED', 'READY_FOR_PICKUP'] },
+        },
+      }),
     ]);
 
     // Calculate ticket revenue
@@ -101,6 +132,26 @@ export class AdminService {
         createdAt: { gte: startOfMonth },
       },
     });
+
+    // Monthly shop order stats
+    const monthlyShopOrders = await this.prisma.order.aggregate({
+      _count: true,
+      _sum: { total: true },
+      where: {
+        merchantId: { not: null },
+        status: { in: ['PAID', 'COMPLETED', 'READY_FOR_PICKUP'] },
+        createdAt: { gte: startOfMonth },
+      },
+    });
+
+    // Build shop owner status counts
+    const shopOwnerStatusCounts = shopOwnerStats.reduce(
+      (acc, item) => {
+        acc[item.status.toLowerCase()] = item._count;
+        return acc;
+      },
+      { pending: 0, active: 0, suspended: 0, blocked: 0 } as Record<string, number>,
+    );
 
     return {
       users: {
@@ -133,6 +184,27 @@ export class AdminService {
         pending: await this.prisma.order.count({ where: { status: 'PENDING' } }),
         completed: orderStats._count,
         revenue: orderStats._sum.total || 0,
+      },
+      // New shop statistics
+      shop: {
+        owners: {
+          total: Object.values(shopOwnerStatusCounts).reduce((a, b) => a + b, 0),
+          pending: shopOwnerStatusCounts.pending,
+          active: shopOwnerStatusCounts.active,
+          suspended: shopOwnerStatusCounts.suspended,
+        },
+        items: {
+          total: shopItemStats._count,
+          inStock: shopItemStats._count,
+        },
+        orders: {
+          total: shopOrderStats._count,
+          revenue: shopOrderStats._sum.total || 0,
+          thisMonth: {
+            total: monthlyShopOrders._count,
+            revenue: monthlyShopOrders._sum.total || 0,
+          },
+        },
       },
     };
   }
@@ -469,6 +541,251 @@ export class AdminService {
       where: { id: merchantId },
       data: {
         status: 'SUSPENDED',
+      },
+    });
+  }
+
+  // ==================== SHOP OWNER MANAGEMENT ====================
+
+  async getShopOwners(query: ShopOwnerQueryDto) {
+    const { status, verified, search, page = 1, limit = 20 } = query;
+
+    const where: any = {
+      type: 'SHOP_OWNER',
+    };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (verified !== undefined) {
+      where.isVerified = verified;
+    }
+
+    if (search) {
+      where.OR = [
+        { businessName: { contains: search, mode: 'insensitive' } },
+        { tradeName: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [merchants, total] = await Promise.all([
+      this.prisma.merchant.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              phone: true,
+              email: true,
+              name: true,
+            },
+          },
+          shopItems: {
+            select: { id: true },
+          },
+          _count: {
+            select: {
+              shopItems: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.merchant.count({ where }),
+    ]);
+
+    // Get order counts for each shop owner
+    const shopOwnersWithStats = await Promise.all(
+      merchants.map(async (merchant) => {
+        const itemIds = merchant.shopItems.map((item) => item.id);
+        const orderCount = itemIds.length > 0
+          ? await this.prisma.orderItem.count({
+              where: { shopItemId: { in: itemIds } },
+            })
+          : 0;
+
+        return {
+          ...merchant,
+          orderCount,
+        };
+      }),
+    );
+
+    return {
+      data: shopOwnersWithStats,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getShopOwner(merchantId: string) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId, type: 'SHOP_OWNER' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            phone: true,
+            email: true,
+            name: true,
+            role: true,
+            createdAt: true,
+          },
+        },
+        shopItems: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            category: true,
+            inStock: true,
+            stockQuantity: true,
+          },
+        },
+      },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Shop owner not found');
+    }
+
+    // Get order statistics
+    const itemIds = merchant.shopItems.map((item) => item.id);
+    const orderStats = itemIds.length > 0
+      ? await this.prisma.orderItem.aggregate({
+          _count: true,
+          _sum: { subtotal: true },
+          where: { shopItemId: { in: itemIds } },
+        })
+      : { _count: 0, _sum: { subtotal: 0 } };
+
+    return {
+      ...merchant,
+      stats: {
+        totalItems: merchant.shopItems.length,
+        totalOrders: orderStats._count,
+        totalRevenue: orderStats._sum.subtotal || 0,
+      },
+    };
+  }
+
+  async approveShopOwner(merchantId: string, adminId: string, dto: ApproveShopOwnerDto) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId, type: 'SHOP_OWNER' },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Shop owner not found');
+    }
+
+    if (merchant.status !== 'PENDING') {
+      throw new BadRequestException('Only pending shop owners can be approved');
+    }
+
+    return this.prisma.merchant.update({
+      where: { id: merchantId },
+      data: {
+        isVerified: true,
+        verifiedAt: new Date(),
+        verifiedBy: adminId,
+        status: 'ACTIVE',
+        commissionRate: dto.commissionRate || merchant.commissionRate,
+      },
+      include: {
+        user: {
+          select: { name: true, email: true, phone: true },
+        },
+      },
+    });
+  }
+
+  async rejectShopOwner(merchantId: string, adminId: string, dto: RejectShopOwnerDto) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId, type: 'SHOP_OWNER' },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Shop owner not found');
+    }
+
+    if (merchant.status !== 'PENDING') {
+      throw new BadRequestException('Only pending shop owners can be rejected');
+    }
+
+    // Update the user role back to USER
+    await this.prisma.user.update({
+      where: { id: merchant.userId },
+      data: { role: 'USER' },
+    });
+
+    return this.prisma.merchant.update({
+      where: { id: merchantId },
+      data: {
+        status: 'BLOCKED',
+      },
+      include: {
+        user: {
+          select: { name: true, email: true, phone: true },
+        },
+      },
+    });
+  }
+
+  async suspendShopOwner(merchantId: string, dto: SuspendShopOwnerDto) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId, type: 'SHOP_OWNER' },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Shop owner not found');
+    }
+
+    if (merchant.status === 'SUSPENDED') {
+      throw new BadRequestException('Shop owner is already suspended');
+    }
+
+    return this.prisma.merchant.update({
+      where: { id: merchantId },
+      data: {
+        status: 'SUSPENDED',
+      },
+      include: {
+        user: {
+          select: { name: true, email: true, phone: true },
+        },
+      },
+    });
+  }
+
+  async reactivateShopOwner(merchantId: string) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId, type: 'SHOP_OWNER' },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Shop owner not found');
+    }
+
+    if (merchant.status !== 'SUSPENDED') {
+      throw new BadRequestException('Only suspended shop owners can be reactivated');
+    }
+
+    return this.prisma.merchant.update({
+      where: { id: merchantId },
+      data: {
+        status: 'ACTIVE',
+      },
+      include: {
+        user: {
+          select: { name: true, email: true, phone: true },
+        },
       },
     });
   }

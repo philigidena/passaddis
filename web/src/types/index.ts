@@ -54,6 +54,26 @@ export interface AdminDashboardStats {
     completed: number;
     revenue: number;
   };
+  shop?: {
+    owners: {
+      total: number;
+      pending: number;
+      active: number;
+      suspended: number;
+    };
+    items: {
+      total: number;
+      inStock: number;
+    };
+    orders: {
+      total: number;
+      revenue: number;
+      thisMonth: {
+        total: number;
+        revenue: number;
+      };
+    };
+  };
 }
 
 export interface OrganizerDashboardStats {

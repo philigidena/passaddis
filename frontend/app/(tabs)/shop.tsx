@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, useColorScheme, useWindowDimensions, ActivityIndicator, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -83,14 +83,19 @@ export default function ShopScreen() {
                                     <Text style={styles.headerTitle}>Shop</Text>
                                     <Text style={styles.headerSubtitle}>Pickup from partner supermarkets</Text>
                                 </View>
-                                <TouchableOpacity style={styles.cartButton} onPress={() => setShowCart(true)}>
-                                    <Ionicons name="bag-outline" size={24} color="#FFFFFF" />
-                                    {totalItems > 0 && (
-                                        <View style={[styles.cartBadge, { backgroundColor: theme.primary }]}>
-                                            <Text style={styles.cartBadgeText}>{totalItems}</Text>
-                                        </View>
-                                    )}
-                                </TouchableOpacity>
+                                <View style={styles.headerActions}>
+                                    <TouchableOpacity style={styles.ordersButton} onPress={() => router.push('/shop-orders')}>
+                                        <Ionicons name="receipt-outline" size={22} color="#FFFFFF" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.cartButton} onPress={() => setShowCart(true)}>
+                                        <Ionicons name="bag-outline" size={24} color="#FFFFFF" />
+                                        {totalItems > 0 && (
+                                            <View style={[styles.cartBadge, { backgroundColor: theme.primary }]}>
+                                                <Text style={styles.cartBadgeText}>{totalItems}</Text>
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
                             </View>
 
                             {/* Promo Banner */}
@@ -606,6 +611,19 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: 'rgba(255,255,255,0.7)',
         marginTop: 2,
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    ordersButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     cartButton: {
         width: 44,

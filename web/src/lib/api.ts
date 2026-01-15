@@ -393,6 +393,27 @@ export const adminApi = {
   suspendOrganizer: (id: string, reason: string) =>
     handleResponse<MerchantProfile>(api.post(`/admin/organizers/${id}/suspend`, { reason })),
 
+  // Shop Owners
+  getShopOwners: (params?: { status?: string; verified?: boolean; search?: string; page?: number; limit?: number }) =>
+    handleResponse<PaginatedResponse<MerchantProfile>>(api.get('/admin/shop-owners', { params })),
+
+  getShopOwner: (id: string) =>
+    handleResponse<MerchantProfile & { stats: { totalItems: number; totalOrders: number; totalRevenue: number } }>(
+      api.get(`/admin/shop-owners/${id}`)
+    ),
+
+  approveShopOwner: (id: string, commissionRate?: number) =>
+    handleResponse<MerchantProfile>(api.post(`/admin/shop-owners/${id}/approve`, { commissionRate })),
+
+  rejectShopOwner: (id: string, reason: string) =>
+    handleResponse<MerchantProfile>(api.post(`/admin/shop-owners/${id}/reject`, { reason })),
+
+  suspendShopOwner: (id: string, reason: string) =>
+    handleResponse<MerchantProfile>(api.post(`/admin/shop-owners/${id}/suspend`, { reason })),
+
+  reactivateShopOwner: (id: string) =>
+    handleResponse<MerchantProfile>(api.post(`/admin/shop-owners/${id}/reactivate`)),
+
   // Shop Items
   getShopItems: () => handleResponse<ShopItem[]>(api.get('/admin/shop/items')),
 
@@ -586,9 +607,79 @@ export const shopOwnerApi = {
       api.post('/shop-owner/validate-pickup', { qrCode })
     ),
 
+  cancelOrder: (id: string, reason: string) =>
+    handleResponse<ShopOrder>(api.post(`/shop-owner/orders/${id}/cancel`, { reason })),
+
   // Analytics
   getAnalytics: (period: 'week' | 'month' | 'year' = 'month') =>
     handleResponse<any>(api.get('/shop-owner/analytics', { params: { period } })),
+
+  // Shop Items Management
+  getItems: (params?: {
+    category?: string;
+    search?: string;
+    curatedOnly?: boolean;
+    inStockOnly?: boolean;
+    eventId?: string;
+  }) => handleResponse<ShopItem[]>(api.get('/shop-owner/items', { params })),
+
+  getItem: (id: string) => handleResponse<ShopItem>(api.get(`/shop-owner/items/${id}`)),
+
+  createItem: (data: {
+    name: string;
+    description?: string;
+    price: number;
+    imageUrl?: string;
+    category: string;
+    stockQuantity?: number;
+    lowStockThreshold?: number;
+    sku?: string;
+    isCurated?: boolean;
+    isFeatured?: boolean;
+    displayOrder?: number;
+    badge?: string;
+    eventId?: string;
+  }) => handleResponse<ShopItem>(api.post('/shop-owner/items', data)),
+
+  updateItem: (id: string, data: Partial<{
+    name: string;
+    description: string;
+    price: number;
+    imageUrl: string;
+    category: string;
+    inStock: boolean;
+    stockQuantity: number;
+    lowStockThreshold: number;
+    sku: string;
+    isCurated: boolean;
+    isFeatured: boolean;
+    displayOrder: number;
+    badge: string;
+    eventId: string;
+  }>) => handleResponse<ShopItem>(api.patch(`/shop-owner/items/${id}`, data)),
+
+  deleteItem: (id: string) => handleResponse<ShopItem>(api.delete(`/shop-owner/items/${id}`)),
+
+  // Curated Items
+  getCuratedItems: () => handleResponse<ShopItem[]>(api.get('/shop-owner/items/curated')),
+
+  updateCuratedStatus: (itemIds: string[], isCurated: boolean) =>
+    handleResponse<{ updated: number }>(
+      api.post('/shop-owner/items/curated', { itemIds, isCurated })
+    ),
+
+  reorderCuratedItems: (items: Array<{ id: string; displayOrder: number }>) =>
+    handleResponse<{ reordered: number }>(
+      api.post('/shop-owner/items/curated/reorder', { items })
+    ),
+
+  // Stock Management
+  updateStock: (itemId: string, stockQuantity: number, reason?: string) =>
+    handleResponse<ShopItem>(
+      api.patch(`/shop-owner/items/${itemId}/stock`, { stockQuantity, reason })
+    ),
+
+  getLowStockItems: () => handleResponse<ShopItem[]>(api.get('/shop-owner/items/low-stock')),
 };
 
 export default api;
