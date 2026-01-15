@@ -619,7 +619,7 @@ model OrderItem {
   id        String   @id @default(uuid())
   quantity  Int
   price     Float          // Unit price at time of purchase
-  subtotal  Float          // quantity * price
+  subtotal  Float         @default(0)  // quantity * price
   createdAt DateTime @default(now())
 
   order     Order    @relation(fields: [orderId], references: [id])

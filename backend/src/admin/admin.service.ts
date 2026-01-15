@@ -551,7 +551,7 @@ export class AdminService {
     const { status, verified, search, page = 1, limit = 20 } = query;
 
     const where: any = {
-      type: 'SHOP_OWNER',
+      type: 'SHOP',
     };
 
     if (status) {
@@ -626,8 +626,8 @@ export class AdminService {
   }
 
   async getShopOwner(merchantId: string) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { id: merchantId, type: 'SHOP_OWNER' },
+    const merchant = await this.prisma.merchant.findFirst({
+      where: { id: merchantId, type: 'SHOP' },
       include: {
         user: {
           select: {
@@ -677,8 +677,8 @@ export class AdminService {
   }
 
   async approveShopOwner(merchantId: string, adminId: string, dto: ApproveShopOwnerDto) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { id: merchantId, type: 'SHOP_OWNER' },
+    const merchant = await this.prisma.merchant.findFirst({
+      where: { id: merchantId, type: 'SHOP' },
     });
 
     if (!merchant) {
@@ -707,8 +707,8 @@ export class AdminService {
   }
 
   async rejectShopOwner(merchantId: string, adminId: string, dto: RejectShopOwnerDto) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { id: merchantId, type: 'SHOP_OWNER' },
+    const merchant = await this.prisma.merchant.findFirst({
+      where: { id: merchantId, type: 'SHOP' },
     });
 
     if (!merchant) {
@@ -739,8 +739,8 @@ export class AdminService {
   }
 
   async suspendShopOwner(merchantId: string, dto: SuspendShopOwnerDto) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { id: merchantId, type: 'SHOP_OWNER' },
+    const merchant = await this.prisma.merchant.findFirst({
+      where: { id: merchantId, type: 'SHOP' },
     });
 
     if (!merchant) {
@@ -765,8 +765,8 @@ export class AdminService {
   }
 
   async reactivateShopOwner(merchantId: string) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { id: merchantId, type: 'SHOP_OWNER' },
+    const merchant = await this.prisma.merchant.findFirst({
+      where: { id: merchantId, type: 'SHOP' },
     });
 
     if (!merchant) {
