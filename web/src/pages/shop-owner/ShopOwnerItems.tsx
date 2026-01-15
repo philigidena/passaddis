@@ -7,7 +7,7 @@ import {
   StatusBadge,
   DashboardButton,
 } from '@/components/layout/DashboardLayout';
-import type { ShopItem } from '@/types';
+import type { ShopItem, ShopCategory } from '@/types';
 
 // Icons
 const DashboardIcon = () => (
@@ -122,17 +122,6 @@ export function ShopOwnerItems() {
       ));
     } catch (error) {
       console.error('Failed to update curated status:', error);
-    }
-  };
-
-  const handleUpdateStock = async (itemId: string, quantity: number) => {
-    try {
-      await shopOwnerApi.updateStock(itemId, quantity);
-      setItems(items.map(i =>
-        i.id === itemId ? { ...i, stockQuantity: quantity, inStock: quantity > 0 } : i
-      ));
-    } catch (error) {
-      console.error('Failed to update stock:', error);
     }
   };
 
@@ -482,7 +471,7 @@ function ItemModal({ item, onClose, onSave, onDelete, isSubmitting }: ItemModalP
               <label className="block text-sm font-medium text-gray-300 mb-1">Category *</label>
               <select
                 value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value as ShopCategory })}
                 className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white focus:outline-none focus:border-orange-500"
               >
                 <option value="WATER">Water</option>

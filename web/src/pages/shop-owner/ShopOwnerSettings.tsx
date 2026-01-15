@@ -4,7 +4,6 @@ import { useAuth } from '@/context/AuthContext';
 import { shopOwnerApi } from '@/lib/api';
 import {
   DashboardLayout,
-  DashboardButton,
   StatusBadge,
 } from '@/components/layout/DashboardLayout';
 import type { MerchantProfile } from '@/types';
@@ -66,7 +65,7 @@ const ethiopianCities = [
 ];
 
 export function ShopOwnerSettings() {
-  const { user, isLoading: authLoading, refreshUser } = useAuth();
+  const { isLoading: authLoading, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<MerchantProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -337,10 +336,10 @@ export function ShopOwnerSettings() {
 
           {/* Submit Button */}
           <div className="mt-8 flex flex-col sm:flex-row gap-4">
-            <DashboardButton
+            <button
               type="submit"
-              variant="primary"
               disabled={saving}
+              className="flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-orange-500 text-white font-medium hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {saving ? (
                 <>
@@ -355,16 +354,16 @@ export function ShopOwnerSettings() {
               ) : (
                 'Save Changes'
               )}
-            </DashboardButton>
+            </button>
 
             {!isNewProfile && (
-              <DashboardButton
+              <button
                 type="button"
-                variant="secondary"
                 onClick={() => navigate('/shop-owner')}
+                className="px-6 py-3 rounded-lg bg-gray-700 text-white font-medium hover:bg-gray-600 transition-colors"
               >
                 Cancel
-              </DashboardButton>
+              </button>
             )}
           </div>
         </form>
