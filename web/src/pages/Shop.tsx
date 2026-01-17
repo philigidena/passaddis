@@ -25,6 +25,8 @@ const CATEGORIES = [
   { id: 'MERCH', label: 'Merch' },
 ];
 
+const CART_STORAGE_KEY = 'passaddis_cart';
+
 export function ShopPage() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
@@ -40,6 +42,35 @@ export function ShopPage() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
 
+  // Load cart from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedCart = localStorage.getItem(CART_STORAGE_KEY);
+      if (savedCart) {
+        const parsedCart = JSON.parse(savedCart);
+        // Validate cart structure
+        if (Array.isArray(parsedCart) && parsedCart.every(item => item.shopItemId && item.quantity)) {
+          setCart(parsedCart);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load cart from localStorage:', error);
+    }
+  }, []);
+
+  // Save cart to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      if (cart.length > 0) {
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+      } else {
+        localStorage.removeItem(CART_STORAGE_KEY);
+      }
+    } catch (error) {
+      console.error('Failed to save cart to localStorage:', error);
+    }
+  }, [cart]);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -53,6 +84,24 @@ export function ShopPage() {
 
     if (itemsRes.data) {
       setItems(itemsRes.data);
+
+      // Update cart items with fresh data from API
+      setCart(prevCart => {
+        const itemsMap = new Map(itemsRes.data!.map((item: ShopItem) => [item.id, item]));
+        return prevCart
+          .filter(cartItem => {
+            const item = itemsMap.get(cartItem.shopItemId);
+            // Remove items that no longer exist or are out of stock
+            return item && item.inStock;
+          })
+          .map(cartItem => {
+            const item = itemsMap.get(cartItem.shopItemId);
+            if (item) {
+              return { ...cartItem, shopItem: item };
+            }
+            return cartItem;
+          });
+      });
     }
     if (locationsRes.data) {
       setPickupLocations(locationsRes.data);
@@ -128,15 +177,27 @@ export function ShopPage() {
     }
 
     if (result.data) {
+      // Clear cart after successful order creation
+      setCart([]);
+
       // If payment required, initiate payment
       if (result.data.paymentRequired > 0) {
-        const paymentResult = await paymentsApi.initiate(result.data.order.id);
+        const paymentResult = await paymentsApi.initiate(result.data.order.id, 'CHAPA');
+        if (paymentResult.error) {
+          setCheckoutError(paymentResult.error);
+          setIsCheckingOut(false);
+          return;
+        }
         if (paymentResult.data?.checkout_url) {
           window.location.href = paymentResult.data.checkout_url;
           return;
+        } else {
+          setCheckoutError('Payment service temporarily unavailable. Please try again later.');
+          setIsCheckingOut(false);
+          return;
         }
       }
-      // If free or payment initiated, go to order detail
+      // If free, go to order detail
       navigate(`/shop/orders/${result.data.order.id}`);
     }
 
