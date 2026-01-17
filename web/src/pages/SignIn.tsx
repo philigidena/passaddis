@@ -251,6 +251,17 @@ export function SignInPage() {
                       }
                     />
                   )}
+
+                  {authMode === 'login' && (
+                    <div className="text-right">
+                      <Link
+                        to="/forgot-password"
+                        className="text-sm text-primary hover:underline"
+                      >
+                        Forgot Password?
+                      </Link>
+                    </div>
+                  )}
                 </>
               )}
 

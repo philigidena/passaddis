@@ -1,0 +1,2 @@
+/api/*  http://passaddis-dev-backend-env.eba-bvsaimrn.eu-north-1.elasticbeanstalk.com/api/:splat  200
+/*  /index.html  200

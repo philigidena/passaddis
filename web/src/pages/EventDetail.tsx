@@ -137,10 +137,11 @@ export function EventDetailPage() {
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
       } else {
-        setPurchaseError('Failed to get checkout URL');
+        setPurchaseError('Payment service temporarily unavailable. Please try again later.');
         setIsPurchasing(false);
       }
     } catch (err) {
+      console.error('Purchase error:', err);
       setPurchaseError('An error occurred. Please try again.');
       setIsPurchasing(false);
     }
