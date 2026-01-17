@@ -5,6 +5,8 @@ import { HomePage } from '@/pages/Home';
 import { EventsPage } from '@/pages/Events';
 import { EventDetailPage } from '@/pages/EventDetail';
 import { SignInPage } from '@/pages/SignIn';
+import { ForgotPasswordPage } from '@/pages/ForgotPassword';
+import { ResetPasswordPage } from '@/pages/ResetPassword';
 import { TicketsPage } from '@/pages/Tickets';
 import { TicketDetailPage } from '@/pages/TicketDetail';
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
@@ -27,6 +29,12 @@ import { ShopOwnerScan } from '@/pages/shop-owner/ShopOwnerScan';
 import { ShopOwnerItems } from '@/pages/shop-owner/ShopOwnerItems';
 import { ShopOwnerSettings } from '@/pages/shop-owner/ShopOwnerSettings';
 import { ProfilePage } from '@/pages/Profile';
+import { AboutPage } from '@/pages/About';
+import { ContactPage } from '@/pages/Contact';
+import { CareersPage } from '@/pages/Careers';
+import { TermsPage } from '@/pages/Terms';
+import { PrivacyPage } from '@/pages/Privacy';
+import { RefundPage } from '@/pages/Refund';
 import type { ReactNode } from 'react';
 
 const queryClient = new QueryClient({
@@ -76,6 +84,8 @@ function AppRoutes() {
       <Route path="/events/:id" element={<EventDetailPage />} />
       <Route path="/signin" element={<SignInPage />} />
       <Route path="/login" element={<Navigate to="/signin" replace />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Protected User Routes */}
       <Route
@@ -273,6 +283,15 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Static Pages */}
+      <Route path="/about" element={<AboutPage />} />
+      <Route path="/contact" element={<ContactPage />} />
+      <Route path="/careers" element={<CareersPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/refund" element={<RefundPage />} />
+
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
