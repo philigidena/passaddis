@@ -1,0 +1,573 @@
+// PassAddis Database Schema
+// Event ticketing + Shop with supermarket pickup
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============== USERS ==============
+
+model User {
+  id            String    @id @default(uuid())
+  phone         String    @unique
+  email         String?   @unique
+  name          String?
+  passwordHash  String?
+  isVerified    Boolean   @default(false)
+  role          UserRole  @default(USER)
+  failedLoginAttempts Int @default(0)
+  lockedUntil   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  tickets       Ticket[]
+  orders        Order[]
+  organizer     Organizer?
+  merchant      Merchant?
+  otpCodes      OtpCode[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  USER
+  ORGANIZER
+  SHOP_OWNER
+  ADMIN
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  code      String
+  phone     String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+
+  @@map("otp_codes")
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  expiresAt   DateTime
+  revoked     Boolean  @default(false)
+  revokedAt   DateTime?
+  deviceInfo  String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// ============== AUDIT LOG ==============
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String   // CREATE, UPDATE, DELETE, LOGIN, etc.
+  entity      String   // User, Event, Order, etc.
+  entityId    String?
+  oldValue    Json?
+  newValue    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id])
+  userId      String?
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============== PROMO CODES ==============
+
+model PromoCode {
+  id            String       @id @default(uuid())
+  code          String       @unique
+  description   String?
+  discountType  DiscountType
+  discountValue Float        // Percentage or fixed amount
+  minPurchase   Float?       // Minimum purchase amount
+  maxDiscount   Float?       // Maximum discount (for percentage)
+  maxUses       Int?         // Total uses allowed (null = unlimited)
+  usedCount     Int          @default(0)
+  maxUsesPerUser Int         @default(1)
+  validFrom     DateTime
+  validUntil    DateTime
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Optional: limit to specific event
+  eventId       String?
+  event         Event?       @relation(fields: [eventId], references: [id])
+
+  usages        PromoCodeUsage[]
+
+  @@index([code])
+  @@index([eventId])
+  @@map("promo_codes")
+}
+
+model PromoCodeUsage {
+  id          String    @id @default(uuid())
+  usedAt      DateTime  @default(now())
+  discount    Float     // Actual discount applied
+
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id])
+  promoCodeId String
+  orderId     String
+  userId      String
+
+  @@unique([promoCodeId, orderId])
+  @@index([userId])
+  @@map("promo_code_usages")
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+// ============== WAITLIST ==============
+
+model Waitlist {
+  id          String   @id @default(uuid())
+  email       String?
+  phone       String?
+  ticketTypeId String?
+  notified    Boolean  @default(false)
+  notifiedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  event       Event    @relation(fields: [eventId], references: [id])
+  eventId     String
+  userId      String?
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@map("waitlists")
+}
+
+// ============== MERCHANTS (Sub-merchants under PassAddis) ==============
+
+model Merchant {
+  id              String         @id @default(uuid())
+  merchantCode    String         @unique  // Sub-merchant ID (e.g., PA001, PA002)
+  businessName    String
+  tradeName       String?        // Display name
+  description     String?
+  logo            String?
+  type            MerchantType   @default(ORGANIZER)
+  status          MerchantStatus @default(PENDING)
+
+  // Business details
+  tinNumber       String?        // Tax ID
+  licenseNumber   String?
+  businessAddress String?
+  city            String         @default("Addis Ababa")
+
+  // Settlement info
+  bankName        String?
+  bankAccount     String?
+  telebirrAccount String?        // For Telebirr payouts
+  cbeBirrAccount  String?        // For CBE Birr payouts
+
+  // Commission & fees
+  commissionRate  Float          @default(5.0)  // PassAddis takes 5%
+  settlementDays  Int            @default(3)    // T+3 settlement
+  minPayout       Float          @default(100)  // Min 100 ETB to settle
+
+  // Verification
+  isVerified      Boolean        @default(false)
+  verifiedAt      DateTime?
+  verifiedBy      String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  user            User           @relation(fields: [userId], references: [id])
+  userId          String         @unique
+  events          Event[]
+  settlements     Settlement[]
+  walletTransactions WalletTransaction[]
+
+  @@map("merchants")
+}
+
+enum MerchantType {
+  ORGANIZER      // Event organizers
+  SHOP           // Shop partners
+  SUPERMARKET    // Pickup location partners
+  VENDOR         // Other vendors
+}
+
+enum MerchantStatus {
+  PENDING        // Awaiting verification
+  ACTIVE         // Verified and active
+  SUSPENDED      // Temporarily suspended
+  BLOCKED        // Permanently blocked
+}
+
+// ============== MERCHANT WALLET ==============
+
+model WalletTransaction {
+  id            String              @id @default(uuid())
+  type          WalletTransactionType
+  amount        Float
+  fee           Float               @default(0)
+  netAmount     Float               // amount - fee
+  balanceBefore Float
+  balanceAfter  Float
+  description   String?
+  reference     String?             // Order ID or Settlement ID
+  createdAt     DateTime            @default(now())
+
+  merchant      Merchant            @relation(fields: [merchantId], references: [id])
+  merchantId    String
+
+  @@map("wallet_transactions")
+}
+
+enum WalletTransactionType {
+  CREDIT         // Money in (from sales)
+  DEBIT          // Money out (settlement)
+  FEE            // Platform fee deduction
+  REFUND         // Refund to customer
+  ADJUSTMENT     // Manual adjustment
+}
+
+// ============== SETTLEMENTS ==============
+
+model Settlement {
+  id              String           @id @default(uuid())
+  settlementRef   String           @unique  // e.g., STL-20241215-001
+  amount          Float
+  fee             Float            @default(0)
+  netAmount       Float
+  status          SettlementStatus @default(PENDING)
+  method          PaymentMethod
+  bankRef         String?          // Bank transfer reference
+  processedAt     DateTime?
+  failureReason   String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  merchant        Merchant         @relation(fields: [merchantId], references: [id])
+  merchantId      String
+
+  @@map("settlements")
+}
+
+enum SettlementStatus {
+  PENDING        // Awaiting processing
+  PROCESSING     // Being processed
+  COMPLETED      // Successfully settled
+  FAILED         // Settlement failed
+}
+
+// ============== ORGANIZERS (Legacy - now Merchant) ==============
+
+model Organizer {
+  id            String   @id @default(uuid())
+  businessName  String
+  description   String?
+  logo          String?
+  isVerified    Boolean  @default(false)
+  bankAccount   String?
+  telebirrId    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id])
+  userId        String   @unique
+  events        Event[]
+
+  @@map("organizers")
+}
+
+// ============== EVENTS ==============
+
+model Event {
+  id              String      @id @default(uuid())
+  title           String
+  description     String
+  imageUrl        String?
+  venue           String
+  address         String?
+  city            String      @default("Addis Ababa")
+  date            DateTime
+  endDate         DateTime?
+  category        EventCategory
+  status          EventStatus @default(DRAFT)
+  isFeatured      Boolean     @default(false)
+
+  // Approval workflow
+  submittedAt     DateTime?   // When submitted for approval
+  approvedAt      DateTime?   // When approved by admin
+  approvedBy      String?     // Admin user ID who approved
+  rejectionReason String?     // Reason if rejected
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Can be linked to either Organizer (legacy) or Merchant (new)
+  organizer     Organizer?  @relation(fields: [organizerId], references: [id])
+  organizerId   String?
+  merchant      Merchant?   @relation(fields: [merchantId], references: [id])
+  merchantId    String?
+
+  ticketTypes   TicketType[]
+  tickets       Ticket[]
+  promoCodes    PromoCode[]
+  waitlist      Waitlist[]
+
+  @@map("events")
+}
+
+enum EventCategory {
+  MUSIC
+  SPORTS
+  ARTS
+  COMEDY
+  FESTIVAL
+  CONFERENCE
+  NIGHTLIFE
+  OTHER
+}
+
+enum EventStatus {
+  DRAFT           // Initial state when organizer creates event
+  PENDING         // Submitted for admin approval
+  APPROVED        // Admin approved, ready to publish
+  PUBLISHED       // Live and visible to public
+  REJECTED        // Admin rejected
+  CANCELLED       // Event cancelled
+  COMPLETED       // Event has ended
+}
+
+// ============== TICKETS ==============
+
+model TicketType {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  quantity    Int
+  sold        Int      @default(0)
+  maxPerOrder Int      @default(10)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event       Event    @relation(fields: [eventId], references: [id])
+  eventId     String
+  tickets     Ticket[]
+
+  @@map("ticket_types")
+}
+
+model Ticket {
+  id          String       @id @default(uuid())
+  qrCode      String       @unique
+  status      TicketStatus @default(VALID)
+  usedAt      DateTime?
+  createdAt   DateTime     @default(now())
+
+  user        User         @relation(fields: [userId], references: [id])
+  userId      String
+  event       Event        @relation(fields: [eventId], references: [id])
+  eventId     String
+  ticketType  TicketType   @relation(fields: [ticketTypeId], references: [id])
+  ticketTypeId String
+  order       Order?       @relation(fields: [orderId], references: [id])
+  orderId     String?
+  transfers   TicketTransfer[]
+
+  @@map("tickets")
+}
+
+enum TicketStatus {
+  VALID
+  USED
+  CANCELLED
+  EXPIRED
+  TRANSFERRED  // Original ticket after transfer
+}
+
+// ============== TICKET TRANSFERS ==============
+
+model TicketTransfer {
+  id              String         @id @default(uuid())
+  status          TransferStatus @default(PENDING)
+  recipientPhone  String?
+  recipientEmail  String?
+  message         String?        // Optional message to recipient
+  transferCode    String         @unique  // Code recipient uses to claim
+  expiresAt       DateTime       // Transfer expires if not claimed
+  claimedAt       DateTime?
+  createdAt       DateTime       @default(now())
+
+  ticket          Ticket         @relation(fields: [ticketId], references: [id])
+  ticketId        String
+  fromUserId      String
+  toUserId        String?        // Set when claimed
+
+  @@index([transferCode])
+  @@index([ticketId])
+  @@map("ticket_transfers")
+}
+
+enum TransferStatus {
+  PENDING    // Waiting for recipient to claim
+  CLAIMED    // Successfully transferred
+  EXPIRED    // Not claimed in time
+  CANCELLED  // Sender cancelled
+}
+
+// ============== SHOP ==============
+
+model ShopItem {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  imageUrl    String?
+  category    ShopCategory
+  inStock     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems  OrderItem[]
+
+  @@map("shop_items")
+}
+
+enum ShopCategory {
+  WATER
+  DRINKS
+  SNACKS
+  MERCH
+}
+
+model PickupLocation {
+  id        String   @id @default(uuid())
+  name      String
+  area      String
+  address   String
+  hours     String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders    Order[]
+
+  @@map("pickup_locations")
+}
+
+// ============== ORDERS ==============
+
+model Order {
+  id              String        @id @default(uuid())
+  orderNumber     String        @unique
+  status          OrderStatus   @default(PENDING)
+  subtotal        Float
+  serviceFee      Float         @default(0)
+  platformFee     Float         @default(0)  // PassAddis commission
+  total           Float
+  merchantAmount  Float?        // Amount to be settled to merchant
+  paymentMethod   PaymentMethod?
+  paymentRef      String?
+  qrCode          String?       @unique
+  pickedUpAt      DateTime?
+  settledAt       DateTime?     // When merchant was paid
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user            User          @relation(fields: [userId], references: [id])
+  userId          String
+  pickupLocation  PickupLocation? @relation(fields: [pickupLocationId], references: [id])
+  pickupLocationId String?
+
+  tickets         Ticket[]
+  items           OrderItem[]
+  payment         Payment?
+
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  READY_FOR_PICKUP
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  quantity  Int
+  price     Float
+  createdAt DateTime @default(now())
+
+  order     Order    @relation(fields: [orderId], references: [id])
+  orderId   String
+  shopItem  ShopItem @relation(fields: [shopItemId], references: [id])
+  shopItemId String
+
+  @@map("order_items")
+}
+
+// ============== PAYMENTS ==============
+
+model Payment {
+  id            String        @id @default(uuid())
+  amount        Float
+  currency      String        @default("ETB")
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  providerRef   String?
+  providerData  Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  order         Order         @relation(fields: [orderId], references: [id])
+  orderId       String        @unique
+
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  CHAPA
+  TELEBIRR
+  CBE_BIRR
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}

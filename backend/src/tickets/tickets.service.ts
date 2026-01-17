@@ -6,6 +6,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AfroSmsProvider } from '../auth/providers/afro-sms.provider';
 import { PurchaseTicketsDto, ValidateTicketDto } from './dto/tickets.dto';
 import {
   InitiateTransferDto,
@@ -27,7 +28,10 @@ export class TicketsService {
   // In-memory cache for recent scans to prevent double-scanning
   private recentScans = new Map<string, number>();
 
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private prisma: PrismaService,
+    private smsProvider: AfroSmsProvider,
+  ) {
     // Clean up old entries every minute
     setInterval(() => {
       const now = Date.now();
@@ -441,8 +445,30 @@ export class TicketsService {
       },
     });
 
-    // TODO: Send notification to recipient (SMS/email)
-    // For now, return the code
+    // Get sender name for personalized message
+    const sender = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+
+    // Send SMS notification to recipient if phone provided
+    if (dto.recipientPhone) {
+      try {
+        await this.smsProvider.sendTransferNotification(
+          dto.recipientPhone,
+          ticket.event.title,
+          transferCode,
+          sender?.name || undefined,
+          TRANSFER_EXPIRY_HOURS,
+        );
+        console.log(`✅ Transfer SMS sent to ${dto.recipientPhone}`);
+      } catch (error) {
+        console.error('Failed to send transfer SMS:', error);
+        // Don't fail the transfer if SMS fails
+      }
+    }
+
+    // TODO: Send email notification if recipientEmail provided
 
     return {
       transfer: {
@@ -457,7 +483,9 @@ export class TicketsService {
         event: ticket.event.title,
         ticketType: ticket.ticketType.name,
       },
-      message: `Share code ${transferCode} with the recipient. Valid for ${TRANSFER_EXPIRY_HOURS} hours.`,
+      message: dto.recipientPhone
+        ? `Transfer code ${transferCode} has been sent to ${dto.recipientPhone}. Valid for ${TRANSFER_EXPIRY_HOURS} hours.`
+        : `Share code ${transferCode} with the recipient. Valid for ${TRANSFER_EXPIRY_HOURS} hours.`,
     };
   }
 

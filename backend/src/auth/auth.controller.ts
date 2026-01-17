@@ -21,6 +21,8 @@ import {
   EmailRegisterDto,
   EmailLoginDto,
   RefreshTokenDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
 } from './dto/auth.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -86,6 +88,22 @@ export class AuthController {
   ) {
     const { ip, device } = this.getClientInfo(req, userAgent);
     return this.authService.loginWithEmail(dto, device, ip);
+  }
+
+  // ============== PASSWORD RESET ==============
+
+  @Public()
+  @Post('forgot-password')
+  @Throttle({ default: { ttl: 60000, limit: 3 } }) // 3 requests per minute
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @Throttle({ default: { ttl: 60000, limit: 5 } }) // 5 attempts per minute
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   // ============== REFRESH TOKEN MANAGEMENT ==============

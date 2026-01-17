@@ -16,6 +16,8 @@ import {
   AuthResponseDto,
   EmailRegisterDto,
   EmailLoginDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
 } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -25,6 +27,7 @@ const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
 const REFRESH_TOKEN_EXPIRY_DAYS = 30;
 const ACCESS_TOKEN_EXPIRY = '15m'; // Short-lived access tokens
+const PASSWORD_RESET_EXPIRY_HOURS = 1;
 
 @Injectable()
 export class AuthService {
@@ -592,5 +595,116 @@ export class AuthService {
     });
 
     return !!user?.passwordHash;
+  }
+
+  // ============== PASSWORD RESET ==============
+
+  // Generate password reset token
+  private generatePasswordResetToken(): string {
+    return crypto.randomBytes(32).toString('hex');
+  }
+
+  // Request password reset (forgot password)
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    const { email } = dto;
+
+    // Find user by email
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    // Always return success to prevent email enumeration
+    if (!user) {
+      console.log(`Password reset requested for non-existent email: ${email}`);
+      return { message: 'If an account exists with this email, you will receive a reset link.' };
+    }
+
+    // Generate reset token
+    const resetToken = this.generatePasswordResetToken();
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const resetTokenExpiresAt = new Date(Date.now() + PASSWORD_RESET_EXPIRY_HOURS * 60 * 60 * 1000);
+
+    // Store hashed token in database
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken: resetTokenHash,
+        resetTokenExpiresAt,
+      },
+    });
+
+    // Log for development (in production, send email)
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    console.log(`🔑 Password reset link for ${email}: ${resetUrl}`);
+
+    // TODO: Send actual email in production
+    // For now, if user has phone, send SMS with code
+    if (user.phone && !user.phone.startsWith('email_')) {
+      const shortCode = resetToken.substring(0, 8).toUpperCase();
+      await this.smsProvider.sendSms(
+        user.phone,
+        `PassAddis password reset code: ${shortCode}. Valid for ${PASSWORD_RESET_EXPIRY_HOURS} hour.`,
+      );
+    }
+
+    // Log audit event
+    await this.logAudit(
+      'PASSWORD_RESET_REQUESTED',
+      'User',
+      user.id,
+      user.id,
+    );
+
+    return { message: 'If an account exists with this email, you will receive a reset link.' };
+  }
+
+  // Reset password with token
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+    const { token, newPassword } = dto;
+
+    // Hash the provided token
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Find user with valid reset token
+    const user = await this.prisma.user.findFirst({
+      where: {
+        resetToken: tokenHash,
+        resetTokenExpiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear reset token
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        resetToken: null,
+        resetTokenExpiresAt: null,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+
+    // Revoke all existing refresh tokens for security
+    await this.revokeAllUserTokens(user.id);
+
+    // Log audit event
+    await this.logAudit(
+      'PASSWORD_RESET_COMPLETED',
+      'User',
+      user.id,
+      user.id,
+    );
+
+    return { message: 'Password has been reset successfully. Please login with your new password.' };
   }
 }

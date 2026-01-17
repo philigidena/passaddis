@@ -6,6 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AfroSmsProvider } from '../auth/providers/afro-sms.provider';
 import {
   CreateShopOwnerProfileDto,
   UpdateShopOwnerProfileDto,
@@ -19,7 +20,10 @@ import {
 
 @Injectable()
 export class ShopOwnerService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private smsProvider: AfroSmsProvider,
+  ) {}
 
   // ==================== HELPER: VERIFY MERCHANT STATUS ====================
 
@@ -352,6 +356,11 @@ export class ShopOwnerService {
 
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
+      include: {
+        user: {
+          select: { phone: true },
+        },
+      },
     });
 
     if (!order) {
@@ -376,7 +385,7 @@ export class ShopOwnerService {
       updateData.pickedUpAt = new Date();
     }
 
-    return this.prisma.order.update({
+    const updatedOrder = await this.prisma.order.update({
       where: { id: orderId },
       data: updateData,
       include: {
@@ -392,6 +401,23 @@ export class ShopOwnerService {
         },
       },
     });
+
+    // Send SMS notification when order is ready for pickup
+    if (status === 'READY_FOR_PICKUP' && order.user?.phone) {
+      try {
+        await this.smsProvider.sendOrderReadyNotification(
+          order.user.phone,
+          order.orderNumber,
+          merchant.businessName,
+        );
+        console.log(`✅ Order ready SMS sent to ${order.user.phone}`);
+      } catch (error) {
+        console.error('Failed to send order ready SMS:', error);
+        // Don't fail the status update if SMS fails
+      }
+    }
+
+    return updatedOrder;
   }
 
   // ==================== VALIDATE PICKUP ====================

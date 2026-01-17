@@ -129,6 +129,33 @@ export class AfroSmsProvider {
   }
 
   /**
+   * Send ticket transfer notification to recipient
+   */
+  async sendTransferNotification(
+    phone: string,
+    eventName: string,
+    transferCode: string,
+    senderName?: string,
+    expiryHours: number = 48,
+  ): Promise<SmsResponse> {
+    const fromText = senderName ? `from ${senderName} ` : '';
+    const message = `PassAddis: You received a ticket ${fromText}for "${eventName}"! Claim code: ${transferCode}. Valid for ${expiryHours}h. Open app to claim.`;
+    return this.sendSms(phone, message);
+  }
+
+  /**
+   * Send order ready for pickup notification
+   */
+  async sendOrderReadyNotification(
+    phone: string,
+    orderNumber: string,
+    shopName: string,
+  ): Promise<SmsResponse> {
+    const message = `PassAddis: Your order #${orderNumber} from ${shopName} is ready for pickup! Show your pickup code at the shop.`;
+    return this.sendSms(phone, message);
+  }
+
+  /**
    * Format Ethiopian phone number
    * Accepts: 0911234567, +251911234567, 251911234567, 911234567
    * Returns: 251911234567
