@@ -21,4 +21,13 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: 'http://passaddis-dev-backend-env.eba-bvsaimrn.eu-north-1.elasticbeanstalk.com',
+        changeOrigin: true,
+      },
+    },
+  },
 })
