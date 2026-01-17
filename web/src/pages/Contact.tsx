@@ -1,13 +1,17 @@
+import { useEffect } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Mail, Phone, MapPin } from 'lucide-react';
 
 export function ContactPage() {
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
   return (
     <div className="min-h-screen bg-dark-bg flex flex-col">
       <Navbar />
-      <main className="flex-1">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <main className="flex-1 pt-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pb-20">
           <h1 className="text-4xl font-bold text-white mb-8">Contact Us</h1>
 
           <div className="space-y-8">

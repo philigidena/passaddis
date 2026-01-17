@@ -1,12 +1,16 @@
+import { useEffect } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 
 export function PrivacyPage() {
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
   return (
     <div className="min-h-screen bg-dark-bg flex flex-col">
       <Navbar />
-      <main className="flex-1">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <main className="flex-1 pt-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pb-20">
           <h1 className="text-4xl font-bold text-white mb-4">Privacy Policy</h1>
           <p className="text-white/60 mb-8">Last updated: January 17, 2026</p>
 
