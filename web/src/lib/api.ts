@@ -174,6 +174,12 @@ export const authApi = {
   login: (email: string, password: string) =>
     handleResponse<AuthResponse>(api.post('/auth/login', { email, password })),
 
+  forgotPassword: (email: string) =>
+    handleResponse<{ message: string }>(api.post('/auth/forgot-password', { email })),
+
+  resetPassword: (token: string, newPassword: string) =>
+    handleResponse<{ message: string }>(api.post('/auth/reset-password', { token, newPassword })),
+
   completeProfile: (name: string, email?: string) =>
     handleResponse<AuthResponse>(api.patch('/auth/complete-profile', { name, email })),
 
