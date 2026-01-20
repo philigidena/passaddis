@@ -1,16 +1,17 @@
 # ✅ PassAddis - Fixes Summary
 
 **Date:** January 20, 2026
-**Commit:** 86c4357
+**Latest Commit:** 0499f12
+**Previous Commit:** 86c4357
 **Developer:** Claude Sonnet 4.5 with @philigidena
 
 ---
 
 ## 📊 Overview
 
-**Total Issues Resolved:** 8 major fixes
-**Files Modified:** 18 files
-**Lines Changed:** +713 insertions, -91 deletions
+**Total Issues Resolved:** 9 major fixes
+**Files Modified:** 20 files
+**Lines Changed:** +925 insertions, -104 deletions
 **Status:** ✅ All Critical Non-Payment Issues Resolved
 
 ---
@@ -50,7 +51,81 @@
 
 ---
 
-### **2. Waitlist Notifications** ✅
+### **2. Shop Owner Role Upgrade & JWT Token Refresh** ✅
+
+**Problem:**
+- Users got 401/403 errors when creating shop owner profile
+- Backend updated role from USER to SHOP_OWNER in database
+- BUT JWT token still contained old role (USER)
+- Users couldn't access shop owner features without logging out/in
+- Poor user experience with authentication errors
+
+**Solution:**
+- **Backend:** [backend/src/shop-owner/shop-owner.service.ts](backend/src/shop-owner/shop-owner.service.ts)
+  - Injected JwtService into ShopOwnerService
+  - Modified createProfile() to generate NEW JWT token after role update
+  - Token payload includes updated role: `{ sub, phone, email, role: 'SHOP_OWNER' }`
+  - Returns: `{ ...merchantProfile, accessToken, user: {...} }`
+
+- **Frontend:** [web/src/pages/shop-owner/ShopOwnerSettings.tsx](web/src/pages/shop-owner/ShopOwnerSettings.tsx#L182-L209)
+  - Detects when createProfile response contains `accessToken`
+  - Stores new JWT token in localStorage
+  - Updates axios authorization header with new token
+  - Stores updated user data with new role
+  - Refreshes AuthContext to reflect role change
+  - User experiences seamless role upgrade
+
+**Key Code Snippet (Backend):**
+```typescript
+// Generate new JWT token with updated role
+const payload = {
+  sub: updatedUser.id,
+  phone: updatedUser.phone,
+  email: updatedUser.email,
+  role: updatedUser.role // Now SHOP_OWNER
+};
+const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+
+return {
+  ...merchant,
+  accessToken,
+  user: { id, phone, name, email, role },
+};
+```
+
+**Key Code Snippet (Frontend):**
+```typescript
+// If creating new profile, backend returns accessToken and user data
+if (isNewProfile && 'accessToken' in response.data) {
+  const { accessToken, user, ...profileData } = response.data;
+
+  // Store new JWT token with updated role
+  if (accessToken) {
+    localStorage.setItem('passaddis_token', accessToken);
+    setAuthToken(accessToken);
+  }
+
+  // Update user data
+  if (user) {
+    localStorage.setItem('passaddis_user', JSON.stringify(user));
+  }
+
+  // Refresh user context
+  await refreshUser();
+}
+```
+
+**Impact:**
+- ✅ No more 401/403 errors when creating shop owner profile
+- ✅ Users can immediately access shop owner features
+- ✅ No need to logout and login again
+- ✅ Seamless role upgrade experience
+- ✅ Proper JWT token lifecycle management
+- ✅ Better security with short-lived tokens (15min)
+
+---
+
+### **3. Waitlist Notifications** ✅
 
 **Problem:**
 - Waitlist functionality existed but users never received notifications
@@ -80,7 +155,7 @@
 
 ---
 
-### **3. Event Cancellation Refund Flow** ✅
+### **4. Event Cancellation Refund Flow** ✅
 
 **Problem:**
 - Organizers could NOT cancel events if tickets were sold
@@ -116,7 +191,7 @@
 
 ---
 
-### **4. Shop Item Search Functionality** ✅
+### **5. Shop Item Search Functionality** ✅
 
 **Problem:**
 - Users could only filter by category
@@ -148,7 +223,7 @@
 
 ---
 
-### **5. Database Performance Indexes** ✅
+### **6. Database Performance Indexes** ✅
 
 **Problem:**
 - No indexes on frequently queried columns
@@ -194,7 +269,7 @@
 
 ---
 
-### **6. Ticket Claim Transfer Code Fix** ✅
+### **7. Ticket Claim Transfer Code Fix** ✅
 
 **Problem:**
 - Transfer codes are 12 characters (6 bytes hex)
@@ -226,7 +301,7 @@
 
 ---
 
-### **7. Ticket Transfer QR Security (Verification)** ✅
+### **8. Ticket Transfer QR Security (Verification)** ✅
 
 **Problem Reported:**
 - Concern about old QR codes not being invalidated after transfer
@@ -248,7 +323,7 @@
 
 ---
 
-### **8. Email Verification Foundation** ✅
+### **9. Email Verification Foundation** ✅
 
 **Problem:**
 - Users auto-verified on registration
