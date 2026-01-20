@@ -706,6 +706,8 @@ export class OrganizerService {
               orderId: order.id,
               amount: order.total,
               netAmount: -order.total, // Deduct full amount
+              balanceBefore: 0,  // Will be calculated by finance team
+              balanceAfter: 0,   // Will be calculated by finance team
               type: 'REFUND',
               status: 'PENDING',
               description: `Refund for cancelled event: ${event.title}`,

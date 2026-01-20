@@ -252,6 +252,8 @@ model WalletTransaction {
   balanceAfter  Float
   description   String?
   reference     String?             // Order ID or Settlement ID
+  status        String?             // Transaction status
+  orderId       String?             // Link to order for refunds
   createdAt     DateTime            @default(now())
 
   merchant      Merchant            @relation(fields: [merchantId], references: [id])
@@ -339,6 +341,9 @@ model Event {
   approvedAt      DateTime?   // When approved by admin
   approvedBy      String?     // Admin user ID who approved
   rejectionReason String?     // Reason if rejected
+
+  // Cancellation support
+  cancelledAt     DateTime?   // When event was cancelled
 
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt

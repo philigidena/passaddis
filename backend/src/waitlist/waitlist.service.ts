@@ -249,14 +249,14 @@ export class WaitlistService {
       .map(async (entry) => {
         try {
           await this.smsProvider.sendWaitlistNotification(
-            entry.phone,
+            entry.phone!,  // Non-null assertion after filter
             event.title,
           );
           console.log(`✅ Waitlist notification sent to ${entry.phone} for event "${event.title}"`);
-          return { phone: entry.phone, success: true };
+          return { phone: entry.phone!, success: true };
         } catch (error) {
           console.error(`❌ Failed to send waitlist notification to ${entry.phone}:`, error);
-          return { phone: entry.phone, success: false, error: error.message };
+          return { phone: entry.phone!, success: false, error: error.message };
         }
       });
 
