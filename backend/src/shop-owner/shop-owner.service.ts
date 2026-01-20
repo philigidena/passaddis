@@ -83,6 +83,10 @@ export class ShopOwnerService {
       },
     });
 
+    if (!merchant) {
+      throw new NotFoundException('Shop owner profile not found. Please create your profile to get started.');
+    }
+
     return merchant;
   }
 

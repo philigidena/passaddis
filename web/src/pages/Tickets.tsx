@@ -265,16 +265,20 @@ export function TicketsPage() {
 
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-white/60 mb-2">
-                      Transfer Code
+                      Transfer Code (12 characters)
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g., ABCD1234"
+                      placeholder="e.g., A1B2C3D4E5F6"
                       value={claimCode}
                       onChange={(e) => setClaimCode(e.target.value.toUpperCase())}
-                      className="w-full px-4 py-3 bg-dark-bg border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-primary text-center font-mono text-xl tracking-wider"
-                      maxLength={8}
+                      className="w-full px-4 py-3 bg-dark-bg border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-primary text-center font-mono text-lg tracking-widest"
+                      maxLength={12}
+                      minLength={12}
                     />
+                    <p className="mt-2 text-xs text-white/40 text-center">
+                      Enter the 12-character code exactly as received
+                    </p>
                   </div>
 
                   {claimError && (
@@ -294,7 +298,7 @@ export function TicketsPage() {
                     <Button
                       className="flex-1"
                       onClick={handleClaimTicket}
-                      disabled={!claimCode.trim() || claimLoading}
+                      disabled={claimCode.trim().length !== 12 || claimLoading}
                     >
                       {claimLoading ? (
                         <Loader2 className="w-4 h-4 animate-spin" />

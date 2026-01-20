@@ -8,20 +8,26 @@ import {
   ValidateNested,
   Min,
   Max,
+  MinLength,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 // Profile DTOs
 export class CreateShopOwnerProfileDto {
   @IsString()
+  @MinLength(3, { message: 'Business name must be at least 3 characters' })
+  @MaxLength(100, { message: 'Business name must not exceed 100 characters' })
   businessName: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(100, { message: 'Trade name must not exceed 100 characters' })
   tradeName?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(500, { message: 'Description must not exceed 500 characters' })
   description?: string;
 
   @IsOptional()

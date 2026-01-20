@@ -19,6 +19,9 @@ model User {
   name          String?
   passwordHash  String?
   isVerified    Boolean   @default(false)
+  emailVerified Boolean   @default(false)
+  emailVerificationToken String?
+  emailVerificationExpiresAt DateTime?
   role          UserRole  @default(USER)
   failedLoginAttempts Int @default(0)
   lockedUntil   DateTime?
@@ -216,6 +219,10 @@ model Merchant {
   shopItems       ShopItem[]
   orders          Order[]        // Shop orders for this merchant
 
+  @@index([status])
+  @@index([type])
+  @@index([isVerified])
+  @@index([status, type])  // Composite for filtering merchants by type and status
   @@map("merchants")
 }
 
@@ -307,6 +314,7 @@ model Organizer {
   userId        String   @unique
   events        Event[]
 
+  @@index([isVerified])
   @@map("organizers")
 }
 
@@ -347,6 +355,13 @@ model Event {
   waitlist      Waitlist[]
   shopItems     ShopItem[]
 
+  @@index([merchantId])
+  @@index([organizerId])
+  @@index([status])
+  @@index([date])
+  @@index([category])
+  @@index([isFeatured])
+  @@index([status, date])  // Composite for published events by date
   @@map("events")
 }
 
@@ -408,6 +423,10 @@ model Ticket {
   orderId     String?
   transfers   TicketTransfer[]
 
+  @@index([userId])
+  @@index([eventId])
+  @@index([status])
+  @@index([orderId])
   @@map("tickets")
 }
 

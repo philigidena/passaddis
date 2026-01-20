@@ -156,6 +156,28 @@ export class AfroSmsProvider {
   }
 
   /**
+   * Send waitlist notification when tickets become available
+   */
+  async sendWaitlistNotification(
+    phone: string,
+    eventName: string,
+  ): Promise<SmsResponse> {
+    const message = `PassAddis: Great news! Tickets are now available for "${eventName}"! Get yours before they sell out. Open the app to purchase.`;
+    return this.sendSms(phone, message);
+  }
+
+  /**
+   * Send event cancellation notification
+   */
+  async sendEventCancellationNotification(
+    phone: string,
+    eventName: string,
+  ): Promise<SmsResponse> {
+    const message = `PassAddis: We regret to inform you that "${eventName}" has been cancelled. Your payment will be refunded within 5-7 business days. We apologize for any inconvenience.`;
+    return this.sendSms(phone, message);
+  }
+
+  /**
    * Format Ethiopian phone number
    * Accepts: 0911234567, +251911234567, 251911234567, 911234567
    * Returns: 251911234567

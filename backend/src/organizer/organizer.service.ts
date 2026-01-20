@@ -6,6 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AfroSmsProvider } from '../auth/providers/afro-sms.provider';
 import {
   CreateOrganizerProfileDto,
   UpdateOrganizerProfileDto,
@@ -15,7 +16,10 @@ import {
 
 @Injectable()
 export class OrganizerService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private smsProvider: AfroSmsProvider,
+  ) {}
 
   // ==================== PROFILE MANAGEMENT ====================
 
@@ -614,8 +618,22 @@ export class OrganizerService {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
       include: {
-        _count: {
-          select: { tickets: true },
+        tickets: {
+          include: {
+            order: {
+              include: {
+                payment: true,
+              },
+            },
+            user: {
+              select: {
+                id: true,
+                phone: true,
+                email: true,
+                name: true,
+              },
+            },
+          },
         },
       },
     });
@@ -628,15 +646,107 @@ export class OrganizerService {
       throw new ForbiddenException('You do not own this event');
     }
 
-    if (event._count.tickets > 0) {
-      throw new BadRequestException(
-        'Cannot cancel event with sold tickets. Please contact support.',
-      );
+    // Check if event can be cancelled (not in the past, not already cancelled)
+    if (event.status === 'CANCELLED') {
+      throw new BadRequestException('Event is already cancelled');
     }
 
-    return this.prisma.event.update({
-      where: { id: eventId },
-      data: { status: 'CANCELLED' },
+    const now = new Date();
+    if (new Date(event.date) < now) {
+      throw new BadRequestException('Cannot cancel past events');
+    }
+
+    // Perform cancellation in a transaction
+    return this.prisma.$transaction(async (tx) => {
+      // Cancel the event
+      const cancelledEvent = await tx.event.update({
+        where: { id: eventId },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: now,
+        },
+      });
+
+      // If there are sold tickets, initiate refunds
+      if (event.tickets && event.tickets.length > 0) {
+        // Get unique orders that need refunds
+        const ordersToRefund = new Map<string, any>();
+        event.tickets.forEach((ticket) => {
+          if (ticket.order && ticket.order.status === 'PAID' && ticket.order.payment) {
+            ordersToRefund.set(ticket.order.id, ticket.order);
+          }
+        });
+
+        // Mark tickets as cancelled
+        await tx.ticket.updateMany({
+          where: { eventId },
+          data: {
+            status: 'CANCELLED',
+          },
+        });
+
+        // Initiate refunds for all paid orders
+        const refundPromises = Array.from(ordersToRefund.values()).map(async (order) => {
+          await tx.order.update({
+            where: { id: order.id },
+            data: {
+              status: 'CANCELLED',
+              refundStatus: 'PENDING',
+              refundAmount: order.total,
+              cancelledAt: now,
+              cancelledBy: 'organizer',
+              cancellationReason: 'Event cancelled by organizer',
+            },
+          });
+
+          // Create a wallet transaction deducting from merchant
+          await tx.walletTransaction.create({
+            data: {
+              merchantId: merchant.id,
+              orderId: order.id,
+              amount: order.total,
+              netAmount: -order.total, // Deduct full amount
+              type: 'REFUND',
+              status: 'PENDING',
+              description: `Refund for cancelled event: ${event.title}`,
+            },
+          });
+        });
+
+        await Promise.all(refundPromises);
+
+        // Send cancellation notifications to all ticket holders
+        const uniqueUsers = new Map<string, any>();
+        event.tickets.forEach((ticket) => {
+          if (ticket.user && ticket.user.phone) {
+            uniqueUsers.set(ticket.user.id, ticket.user);
+          }
+        });
+
+        const notificationPromises = Array.from(uniqueUsers.values()).map(async (user) => {
+          try {
+            await this.smsProvider.sendEventCancellationNotification(
+              user.phone,
+              event.title,
+            );
+            console.log(`✅ Cancellation notification sent to ${user.phone}`);
+          } catch (error) {
+            console.error(`❌ Failed to send cancellation notification to ${user.phone}:`, error);
+          }
+        });
+
+        // Don't wait for notifications (send in background)
+        Promise.all(notificationPromises).catch((error) => {
+          console.error('Error sending cancellation notifications:', error);
+        });
+
+        console.log(`🔄 Event "${event.title}" cancelled. ${ordersToRefund.size} orders marked for refund, ${uniqueUsers.size} customers notified.`);
+      }
+
+      return {
+        ...cancelledEvent,
+        refundsInitiated: event.tickets ? event.tickets.length : 0,
+      };
     });
   }
 

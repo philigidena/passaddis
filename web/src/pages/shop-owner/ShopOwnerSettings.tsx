@@ -90,6 +90,7 @@ export function ShopOwnerSettings() {
 
   const loadProfile = async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await shopOwnerApi.getProfile();
       if (response.data) {
@@ -101,12 +102,21 @@ export function ShopOwnerSettings() {
           city: response.data.city || 'Addis Ababa',
         });
         setIsNewProfile(false);
-      } else if (response.error?.includes('not found')) {
-        setIsNewProfile(true);
+      } else if (response.error) {
+        // Check if it's a 404 (profile not found) or other error
+        if (response.status === 404 || response.error.toLowerCase().includes('not found')) {
+          setIsNewProfile(true);
+        } else if (response.status === 401) {
+          setError('Authentication required. Please sign in again.');
+        } else if (response.status === 403) {
+          setError('You do not have permission to access this page.');
+        } else {
+          setError(response.error || 'Failed to load profile. Please try again.');
+        }
       }
     } catch (error) {
       console.error('Failed to load profile:', error);
-      setIsNewProfile(true);
+      setError('Network error. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -119,8 +129,21 @@ export function ShopOwnerSettings() {
     setSaving(true);
 
     try {
+      // Validation
       if (!formData.businessName.trim()) {
         setError('Business name is required');
+        setSaving(false);
+        return;
+      }
+
+      if (formData.businessName.trim().length < 3) {
+        setError('Business name must be at least 3 characters');
+        setSaving(false);
+        return;
+      }
+
+      if (formData.businessName.trim().length > 100) {
+        setError('Business name must be less than 100 characters');
         setSaving(false);
         return;
       }
@@ -143,22 +166,42 @@ export function ShopOwnerSettings() {
       }
 
       if (response.error) {
-        setError(response.error);
+        // Provide more specific error messages
+        if (response.status === 409) {
+          setError('A profile already exists for this account.');
+        } else if (response.status === 401) {
+          setError('Your session has expired. Please sign in again.');
+        } else if (response.status === 403) {
+          setError('You do not have permission to perform this action.');
+        } else if (response.status === 400) {
+          setError(response.error || 'Invalid input. Please check your information.');
+        } else {
+          setError(response.error || 'Failed to save profile. Please try again.');
+        }
       } else if (response.data) {
         setProfile(response.data);
         setIsNewProfile(false);
         setSuccess(isNewProfile
-          ? 'Profile created successfully! Your application is pending admin approval.'
+          ? 'Profile created successfully! Your application is pending admin approval. You will be notified once your account is activated.'
           : 'Profile updated successfully!'
         );
 
         // Refresh user data to update role
         if (isNewProfile && refreshUser) {
-          await refreshUser();
+          try {
+            await refreshUser();
+          } catch (refreshError) {
+            console.error('Failed to refresh user data:', refreshError);
+            // Don't show error to user as profile was created successfully
+          }
         }
+
+        // Scroll to top to show success message
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (error) {
-      setError('Failed to save profile. Please try again.');
+      console.error('Profile submission error:', error);
+      setError('An unexpected error occurred. Please try again or contact support.');
     } finally {
       setSaving(false);
     }
@@ -197,6 +240,26 @@ export function ShopOwnerSettings() {
             : 'Manage your shop profile and settings'}
         </p>
       </div>
+
+      {/* Error Alert (if profile failed to load) */}
+      {error && !loading && (
+        <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="text-red-400 text-sm font-medium">{error}</p>
+              <button
+                onClick={loadProfile}
+                className="mt-2 text-red-300 hover:text-red-200 text-sm underline"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status Card (for existing profiles) */}
       {profile && (

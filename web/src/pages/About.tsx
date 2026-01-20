@@ -1,6 +1,7 @@
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Target, Zap, Eye, MapPin } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export function AboutPage() {
   return (
@@ -8,11 +9,28 @@ export function AboutPage() {
       <Navbar />
       <main className="flex-1 pt-20">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pb-20">
-          <h1 className="text-4xl font-bold text-white mb-3 animate-fade-in">About PassAddis</h1>
-          <div className="h-1 w-20 bg-primary rounded-full mb-8 animate-slide-in"></div>
+          <motion.h1
+            className="text-4xl font-bold text-white mb-3"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            About PassAddis
+          </motion.h1>
+          <motion.div
+            className="h-1 w-20 bg-primary rounded-full mb-8"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: '5rem', opacity: 1 }}
+            transition={{ duration: 0.6 }}
+          ></motion.div>
 
           <div className="space-y-6 text-white/80 leading-relaxed">
-            <section className="group bg-dark-card border border-white/10 rounded-lg p-6 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1 animate-fade-in-up delay-100">
+            <motion.section
+              className="group bg-dark-card border border-white/10 rounded-lg p-6 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+            >
               <div className="flex items-start gap-4">
                 <div className="p-3 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors duration-300 group-hover:scale-110 transform">
                   <Target className="w-6 h-6 text-primary" />
@@ -26,9 +44,14 @@ export function AboutPage() {
                   </p>
                 </div>
               </div>
-            </section>
+            </motion.section>
 
-            <section className="group bg-dark-card border border-white/10 rounded-lg p-6 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1 animate-fade-in-up delay-200">
+            <motion.section
+              className="group bg-dark-card border border-white/10 rounded-lg p-6 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
               <div className="flex items-start gap-4">
                 <div className="p-3 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors duration-300 group-hover:scale-110 transform">
                   <Zap className="w-6 h-6 text-primary" />
@@ -42,9 +65,14 @@ export function AboutPage() {
                   </p>
                 </div>
               </div>
-            </section>
+            </motion.section>
 
-            <section className="group bg-dark-card border border-white/10 rounded-lg p-6 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1 animate-fade-in-up delay-300">
+            <motion.section
+              className="group bg-dark-card border border-white/10 rounded-lg p-6 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
               <div className="flex items-start gap-4">
                 <div className="p-3 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors duration-300 group-hover:scale-110 transform">
                   <Eye className="w-6 h-6 text-primary" />
@@ -58,9 +86,14 @@ export function AboutPage() {
                   </p>
                 </div>
               </div>
-            </section>
+            </motion.section>
 
-            <section className="group bg-dark-card border border-white/10 rounded-lg p-6 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1 animate-fade-in-up delay-400">
+            <motion.section
+              className="group bg-dark-card border border-white/10 rounded-lg p-6 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+            >
               <div className="flex items-start gap-4">
                 <div className="p-3 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors duration-300 group-hover:scale-110 transform">
                   <MapPin className="w-6 h-6 text-primary" />
@@ -73,7 +106,7 @@ export function AboutPage() {
                   </p>
                 </div>
               </div>
-            </section>
+            </motion.section>
           </div>
         </div>
       </main>

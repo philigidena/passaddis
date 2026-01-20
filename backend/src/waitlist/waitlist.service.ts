@@ -5,11 +5,15 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AfroSmsProvider } from '../auth/providers/afro-sms.provider';
 import { JoinWaitlistDto } from './dto/waitlist.dto';
 
 @Injectable()
 export class WaitlistService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private smsProvider: AfroSmsProvider,
+  ) {}
 
   // Join waitlist for an event
   async joinWaitlist(dto: JoinWaitlistDto, userId: string) {
@@ -202,6 +206,19 @@ export class WaitlistService {
 
   // Internal: Notify waitlist when tickets become available
   async notifyWaitlist(eventId: string, availableTickets: number) {
+    // Get event details
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        title: true,
+        date: true,
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
     const waitlistEntries = await this.prisma.waitlist.findMany({
       where: {
         eventId,
@@ -215,7 +232,7 @@ export class WaitlistService {
       return { notified: 0 };
     }
 
-    // Mark as notified
+    // Mark as notified first (so we don't send duplicates if SMS fails)
     await this.prisma.waitlist.updateMany({
       where: {
         id: { in: waitlistEntries.map((e) => e.id) },
@@ -226,12 +243,33 @@ export class WaitlistService {
       },
     });
 
-    // TODO: Send actual notifications (SMS/email)
-    // For now, just mark them as notified
-    // In production, integrate with SMS/email providers
+    // Send SMS notifications to all waitlisted users with phone numbers
+    const notificationPromises = waitlistEntries
+      .filter((entry) => entry.phone)
+      .map(async (entry) => {
+        try {
+          await this.smsProvider.sendWaitlistNotification(
+            entry.phone,
+            event.title,
+          );
+          console.log(`✅ Waitlist notification sent to ${entry.phone} for event "${event.title}"`);
+          return { phone: entry.phone, success: true };
+        } catch (error) {
+          console.error(`❌ Failed to send waitlist notification to ${entry.phone}:`, error);
+          return { phone: entry.phone, success: false, error: error.message };
+        }
+      });
+
+    const notificationResults = await Promise.allSettled(notificationPromises);
+    const successCount = notificationResults.filter(
+      (r) => r.status === 'fulfilled' && r.value.success
+    ).length;
+
+    console.log(`📧 Waitlist notifications: ${successCount}/${waitlistEntries.length} sent successfully`);
 
     return {
       notified: waitlistEntries.length,
+      smsSent: successCount,
       entries: waitlistEntries.map((e) => ({
         userId: e.userId,
         email: e.email,

@@ -9,6 +9,7 @@ import {
   X,
   ChevronRight,
   Package,
+  Search,
 } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/Button';
@@ -35,6 +36,7 @@ export function ShopPage() {
   const [pickupLocations, setPickupLocations] = useState<PickupLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCart, setShowCart] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<PickupLocation | null>(null);
@@ -109,9 +111,25 @@ export function ShopPage() {
     setLoading(false);
   };
 
-  const filteredItems = selectedCategory === 'all'
-    ? items
-    : items.filter(item => item.category === selectedCategory);
+  const filteredItems = items
+    .filter(item => {
+      // Filter by category
+      if (selectedCategory !== 'all' && item.category !== selectedCategory) {
+        return false;
+      }
+
+      // Filter by search query
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        return (
+          item.name.toLowerCase().includes(query) ||
+          item.description?.toLowerCase().includes(query) ||
+          item.category.toLowerCase().includes(query)
+        );
+      }
+
+      return true;
+    });
 
   const addToCart = (item: ShopItem) => {
     setCart(prev => {
@@ -245,6 +263,30 @@ export function ShopPage() {
           </div>
         </div>
 
+        {/* Search Bar */}
+        <div className="bg-dark-card/30 border-b border-white/5">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Categories */}
         <div className="bg-dark-card/50 border-b border-white/5 sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -274,10 +316,23 @@ export function ShopPage() {
               <Package className="w-16 h-16 text-white/20 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-white mb-2">No items found</h3>
               <p className="text-white/60">
-                {selectedCategory !== 'all'
-                  ? 'Try selecting a different category'
-                  : 'Shop items will appear here soon'}
+                {searchQuery
+                  ? `No results for "${searchQuery}". Try a different search term.`
+                  : selectedCategory !== 'all'
+                    ? 'Try selecting a different category'
+                    : 'Shop items will appear here soon'}
               </p>
+              {(searchQuery || selectedCategory !== 'all') && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSelectedCategory('all');
+                  }}
+                  className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
