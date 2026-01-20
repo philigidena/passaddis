@@ -5,6 +5,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AfroSmsProvider } from '../auth/providers/afro-sms.provider';
 import {
@@ -23,6 +24,7 @@ export class ShopOwnerService {
   constructor(
     private prisma: PrismaService,
     private smsProvider: AfroSmsProvider,
+    private jwtService: JwtService,
   ) {}
 
   // ==================== HELPER: VERIFY MERCHANT STATUS ====================
@@ -126,12 +128,32 @@ export class ShopOwnerService {
     });
 
     // Update user role to SHOP_OWNER
-    await this.prisma.user.update({
+    const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: { role: 'SHOP_OWNER' },
     });
 
-    return merchant;
+    // Generate new JWT token with updated role
+    const payload = {
+      sub: updatedUser.id,
+      phone: updatedUser.phone,
+      email: updatedUser.email,
+      role: updatedUser.role
+    };
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+
+    // Return merchant profile with new access token
+    return {
+      ...merchant,
+      accessToken,
+      user: {
+        id: updatedUser.id,
+        phone: updatedUser.phone,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+      },
+    };
   }
 
   async updateProfile(userId: string, dto: UpdateShopOwnerProfileDto) {

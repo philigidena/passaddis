@@ -179,22 +179,44 @@ export function ShopOwnerSettings() {
           setError(response.error || 'Failed to save profile. Please try again.');
         }
       } else if (response.data) {
-        setProfile(response.data);
+        // If creating new profile, backend returns accessToken and user data
+        if (isNewProfile && 'accessToken' in response.data) {
+          const { accessToken, user, ...profileData } = response.data as any;
+
+          // Store new JWT token with updated role
+          if (accessToken) {
+            localStorage.setItem('passaddis_token', accessToken);
+            // Update axios default header
+            const { setAuthToken } = await import('@/lib/api');
+            setAuthToken(accessToken);
+          }
+
+          // Update user in local storage
+          if (user) {
+            localStorage.setItem('passaddis_user', JSON.stringify(user));
+          }
+
+          // Set profile data (without accessToken and user fields)
+          setProfile(profileData);
+
+          // Refresh user context with new role
+          if (refreshUser) {
+            try {
+              await refreshUser();
+            } catch (refreshError) {
+              console.error('Failed to refresh user context:', refreshError);
+            }
+          }
+        } else {
+          // Update profile (no token change)
+          setProfile(response.data);
+        }
+
         setIsNewProfile(false);
         setSuccess(isNewProfile
           ? 'Profile created successfully! Your application is pending admin approval. You will be notified once your account is activated.'
           : 'Profile updated successfully!'
         );
-
-        // Refresh user data to update role
-        if (isNewProfile && refreshUser) {
-          try {
-            await refreshUser();
-          } catch (refreshError) {
-            console.error('Failed to refresh user data:', refreshError);
-            // Don't show error to user as profile was created successfully
-          }
-        }
 
         // Scroll to top to show success message
         window.scrollTo({ top: 0, behavior: 'smooth' });
