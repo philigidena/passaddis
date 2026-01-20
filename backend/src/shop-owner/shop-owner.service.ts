@@ -38,6 +38,13 @@ export class ShopOwnerService {
       throw new NotFoundException('Shop owner profile not found. Please create one first.');
     }
 
+    // CRITICAL: Verify this is a SHOP merchant, not ORGANIZER
+    if (merchant.type !== 'SHOP') {
+      throw new ForbiddenException(
+        'This account is registered as an organizer. Please use the organizer panel or create a separate shop owner account.',
+      );
+    }
+
     if (requireActive) {
       if (merchant.status === 'PENDING') {
         throw new ForbiddenException(
@@ -87,6 +94,13 @@ export class ShopOwnerService {
 
     if (!merchant) {
       throw new NotFoundException('Shop owner profile not found. Please create your profile to get started.');
+    }
+
+    // CRITICAL: Verify this is a SHOP merchant, not ORGANIZER
+    if (merchant.type !== 'SHOP') {
+      throw new ForbiddenException(
+        'This account is registered as an organizer. Please use the organizer panel or create a separate shop owner account.',
+      );
     }
 
     return merchant;
@@ -545,7 +559,7 @@ export class ShopOwnerService {
 
   async getSalesAnalytics(userId: string, period: 'week' | 'month' | 'year') {
     // Require active status to view analytics
-    await this.getVerifiedMerchant(userId, true);
+    const merchant = await this.getVerifiedMerchant(userId, true);
 
     const now = new Date();
     let startDate: Date;
