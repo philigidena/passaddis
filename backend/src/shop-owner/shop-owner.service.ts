@@ -38,35 +38,32 @@ export class ShopOwnerService {
       throw new NotFoundException('Shop owner profile not found. Please create one first.');
     }
 
-    // CRITICAL: Verify this is a SHOP merchant, not ORGANIZER
-    if (merchant.type !== 'SHOP') {
-      throw new ForbiddenException(
-        'This account is registered as an organizer. Please use the organizer panel or create a separate shop owner account.',
-      );
-    }
+    // NOTE: We allow ORGANIZER merchants to also sell shop items
+    // This provides flexibility for merchants to do both events and shops
+    // The type field indicates their PRIMARY business type
 
     if (requireActive) {
       if (merchant.status === 'PENDING') {
         throw new ForbiddenException(
-          'Your shop owner account is pending approval. Please wait for admin verification.',
+          'Your merchant account is pending approval. Please wait for admin verification.',
         );
       }
 
       if (merchant.status === 'SUSPENDED') {
         throw new ForbiddenException(
-          'Your shop owner account has been suspended. Please contact support for assistance.',
+          'Your merchant account has been suspended. Please contact support for assistance.',
         );
       }
 
       if (merchant.status === 'BLOCKED') {
         throw new ForbiddenException(
-          'Your shop owner account has been blocked. Please contact support for assistance.',
+          'Your merchant account has been blocked. Please contact support for assistance.',
         );
       }
 
       if (merchant.status !== 'ACTIVE') {
         throw new ForbiddenException(
-          `Your shop owner account is not active. Current status: ${merchant.status}`,
+          `Your merchant account is not active. Current status: ${merchant.status}`,
         );
       }
     }
@@ -96,12 +93,8 @@ export class ShopOwnerService {
       throw new NotFoundException('Shop owner profile not found. Please create your profile to get started.');
     }
 
-    // CRITICAL: Verify this is a SHOP merchant, not ORGANIZER
-    if (merchant.type !== 'SHOP') {
-      throw new ForbiddenException(
-        'This account is registered as an organizer. Please use the organizer panel or create a separate shop owner account.',
-      );
-    }
+    // NOTE: We allow merchants of any type to access shop features
+    // This provides flexibility for ORGANIZER merchants to also sell shop items
 
     return merchant;
   }
