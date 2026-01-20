@@ -238,7 +238,7 @@ export class ShopOwnerService {
         id: ti.shopItemId,
         name: item?.name || 'Unknown',
         soldCount: ti._sum.quantity || 0,
-        revenue: (ti._sum.price || 0) * (ti._sum.quantity || 0),
+        revenue: ti._sum.price || 0, // FIX: price is already total revenue, don't double-count
       };
     });
 
@@ -393,6 +393,11 @@ export class ShopOwnerService {
       throw new NotFoundException('Order not found');
     }
 
+    // CRITICAL SECURITY CHECK: Verify merchant owns this order
+    if (order.merchantId !== merchant.id) {
+      throw new ForbiddenException('You do not have permission to update this order');
+    }
+
     // Validate status transition
     const validTransitions: Record<string, string[]> = {
       PAID: ['READY_FOR_PICKUP'],
@@ -450,7 +455,7 @@ export class ShopOwnerService {
 
   async validatePickup(userId: string, qrCode: string) {
     // Require active merchant to validate pickups
-    await this.getVerifiedMerchant(userId, true);
+    const merchant = await this.getVerifiedMerchant(userId, true);
 
     const order = await this.prisma.order.findUnique({
       where: { qrCode },
@@ -478,6 +483,14 @@ export class ShopOwnerService {
       return {
         valid: false,
         message: 'Order not found',
+      };
+    }
+
+    // CRITICAL SECURITY CHECK: Verify merchant owns this order
+    if (order.merchantId !== merchant.id) {
+      return {
+        valid: false,
+        message: 'This order belongs to a different shop',
       };
     }
 
@@ -550,9 +563,10 @@ export class ShopOwnerService {
         break;
     }
 
-    // Get orders in period
+    // Get orders in period - CRITICAL SECURITY FIX: Filter by merchantId
     const orders = await this.prisma.order.findMany({
       where: {
+        merchantId: merchant.id, // SECURITY FIX: Only show this merchant's orders
         createdAt: { gte: startDate },
         status: { in: ['PAID', 'COMPLETED', 'READY_FOR_PICKUP'] },
         items: { some: {} },
@@ -681,8 +695,8 @@ export class ShopOwnerService {
   }
 
   async createShopItem(userId: string, dto: CreateShopItemDto) {
-    // Require active merchant to create items
-    const merchant = await this.getVerifiedMerchant(userId, true);
+    // FIX: Allow PENDING merchants to create items (just not publish/sell yet)
+    const merchant = await this.getVerifiedMerchant(userId, false);
 
     // Check for duplicate SKU if provided
     if (dto.sku) {
@@ -719,8 +733,8 @@ export class ShopOwnerService {
   }
 
   async updateShopItem(userId: string, itemId: string, dto: UpdateShopItemDto) {
-    // Require active merchant to update items
-    const merchant = await this.getVerifiedMerchant(userId, true);
+    // FIX: Allow PENDING merchants to update their items
+    const merchant = await this.getVerifiedMerchant(userId, false);
 
     const item = await this.prisma.shopItem.findUnique({
       where: { id: itemId },
@@ -757,8 +771,8 @@ export class ShopOwnerService {
   }
 
   async deleteShopItem(userId: string, itemId: string) {
-    // Require active merchant to delete items
-    const merchant = await this.getVerifiedMerchant(userId, true);
+    // FIX: Allow PENDING merchants to delete their items
+    const merchant = await this.getVerifiedMerchant(userId, false);
 
     const item = await this.prisma.shopItem.findUnique({
       where: { id: itemId },
