@@ -58,21 +58,42 @@ variable "s3_bucket_arn" {
   type        = string
 }
 
-# Payment & SMS Configuration
-variable "chapa_secret_key" {
-  description = "Chapa API secret key"
+# Payment Configuration - Telebirr
+variable "telebirr_merchant_app_id" {
+  description = "Telebirr Merchant App ID"
   type        = string
   sensitive   = true
   default     = ""
 }
 
-variable "chapa_webhook_secret" {
-  description = "Chapa webhook secret"
+variable "telebirr_fabric_app_id" {
+  description = "Telebirr Fabric App ID"
   type        = string
   sensitive   = true
   default     = ""
 }
 
+variable "telebirr_app_secret" {
+  description = "Telebirr App Secret"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "telebirr_short_code" {
+  description = "Telebirr Short Code"
+  type        = string
+  default     = ""
+}
+
+variable "telebirr_private_key" {
+  description = "Telebirr RSA Private Key"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+# SMS Configuration
 variable "afro_sms_api_key" {
   description = "Afro Message SMS API key"
   type        = string

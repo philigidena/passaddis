@@ -276,18 +276,38 @@ resource "aws_elastic_beanstalk_environment" "backend" {
     value     = var.aws_region
   }
 
+  # Telebirr Payment Configuration
   setting {
     namespace = "aws:elasticbeanstalk:application:environment"
-    name      = "CHAPA_SECRET_KEY"
-    value     = var.chapa_secret_key
+    name      = "TELEBIRR_MERCHANT_APP_ID"
+    value     = var.telebirr_merchant_app_id
   }
 
   setting {
     namespace = "aws:elasticbeanstalk:application:environment"
-    name      = "CHAPA_WEBHOOK_SECRET"
-    value     = var.chapa_webhook_secret
+    name      = "TELEBIRR_FABRIC_APP_ID"
+    value     = var.telebirr_fabric_app_id
   }
 
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "TELEBIRR_APP_SECRET"
+    value     = var.telebirr_app_secret
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "TELEBIRR_SHORT_CODE"
+    value     = var.telebirr_short_code
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "TELEBIRR_PRIVATE_KEY"
+    value     = var.telebirr_private_key
+  }
+
+  # SMS Configuration
   setting {
     namespace = "aws:elasticbeanstalk:application:environment"
     name      = "AFRO_SMS_API_KEY"
