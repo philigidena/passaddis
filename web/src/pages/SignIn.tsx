@@ -235,21 +235,29 @@ export function SignInPage() {
                   />
 
                   {authMode === 'register' && (
-                    <Input
-                      label="Phone Number (Optional)"
-                      placeholder="9XXXXXXXX"
-                      value={phone}
-                      onChange={(e) => {
-                        setPhone(e.target.value);
-                        clearError();
-                      }}
-                      leftIcon={
-                        <div className="flex items-center gap-1">
-                          <Phone className="w-5 h-5" />
-                          <span className="text-white/60 text-sm">+251</span>
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Phone Number (Optional)
+                      </label>
+                      <div className="flex rounded-xl overflow-hidden border-2 border-white/10 hover:border-white/20 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-200">
+                        <div className="flex items-center gap-2 px-4 bg-white/5 border-r border-white/10">
+                          <Phone className="w-4 h-4 text-white/40" />
+                          <span className="text-white/60 text-sm font-medium">+251</span>
                         </div>
-                      }
-                    />
+                        <input
+                          type="tel"
+                          placeholder="912 345 678"
+                          value={phone}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 9);
+                            setPhone(value);
+                            clearError();
+                          }}
+                          className="flex-1 bg-dark-bg px-4 py-3.5 text-white placeholder-white/30 focus:outline-none"
+                        />
+                      </div>
+                      <p className="mt-1.5 text-xs text-white/40">Ethiopian phone number without country code</p>
+                    </div>
                   )}
 
                   {authMode === 'login' && (
@@ -267,21 +275,28 @@ export function SignInPage() {
 
               {/* Phone OTP */}
               {authMode === 'otp' && (
-                <Input
-                  label="Phone Number"
-                  placeholder="9XXXXXXXX"
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value);
-                    clearError();
-                  }}
-                  leftIcon={
-                    <div className="flex items-center gap-1">
-                      <Phone className="w-5 h-5" />
-                      <span className="text-white/60 text-sm">+251</span>
+                <div>
+                  <label className="block text-sm font-medium text-white/80 mb-2">
+                    Phone Number
+                  </label>
+                  <div className="flex rounded-xl overflow-hidden border-2 border-white/10 hover:border-white/20 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-200">
+                    <div className="flex items-center gap-2 px-4 bg-white/5 border-r border-white/10">
+                      <Phone className="w-4 h-4 text-white/40" />
+                      <span className="text-white/60 text-sm font-medium">+251</span>
                     </div>
-                  }
-                />
+                    <input
+                      type="tel"
+                      placeholder="912 345 678"
+                      value={phone}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 9);
+                        setPhone(value);
+                        clearError();
+                      }}
+                      className="flex-1 bg-dark-bg px-4 py-3.5 text-white placeholder-white/30 focus:outline-none"
+                    />
+                  </div>
+                </div>
               )}
 
               {/* OTP Verification */}

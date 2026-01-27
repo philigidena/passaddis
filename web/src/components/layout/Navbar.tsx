@@ -1,48 +1,49 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Ticket, User, LogOut, Calendar, ShoppingBag, LayoutDashboard, Building2, Store } from 'lucide-react';
-import { useState } from 'react';
+import { Menu, X, Ticket, User, LogOut, Calendar, ShoppingBag, LayoutDashboard, Building2, Store, ChevronDown } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import clsx from 'clsx';
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLogout = () => {
     logout();
     navigate('/');
+    setShowUserMenu(false);
   };
 
-  // Get dashboard links based on role
-  const getDashboardLinks = () => {
-    if (!user) return [];
+  // Get primary dashboard link based on role - only ONE main dashboard per role
+  const getPrimaryDashboard = () => {
+    if (!user) return null;
     switch (user.role) {
       case 'ADMIN':
-        return [
-          { path: '/admin', label: 'Admin Panel', icon: LayoutDashboard },
-          { path: '/organizer', label: 'Organizer Portal', icon: Building2 },
-          { path: '/shop-owner', label: 'Shop Dashboard', icon: Store },
-        ];
+        return { path: '/admin', label: 'Admin Panel', icon: LayoutDashboard };
       case 'ORGANIZER':
-        return [
-          { path: '/organizer', label: 'Organizer Portal', icon: Building2 },
-          { path: '/shop-owner', label: 'Become Shop Owner', icon: Store },
-        ];
+        return { path: '/organizer', label: 'Dashboard', icon: Building2 };
       case 'SHOP_OWNER':
-        return [
-          { path: '/shop-owner', label: 'Shop Dashboard', icon: Store },
-          { path: '/organizer', label: 'Become Organizer', icon: Building2 },
-        ];
+        return { path: '/shop-owner', label: 'Dashboard', icon: Store };
       default:
-        return [
-          { path: '/organizer', label: 'Become Organizer', icon: Building2 },
-          { path: '/shop-owner', label: 'Become Shop Owner', icon: Store },
-        ];
+        return null; // Regular users don't see a dashboard link
     }
   };
 
-  const dashboardLinks = getDashboardLinks();
+  const primaryDashboard = getPrimaryDashboard();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass">
@@ -58,7 +59,7 @@ export function Navbar() {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-6">
             <Link
               to="/events"
               className="text-white/70 hover:text-white transition-colors flex items-center gap-2"
@@ -82,48 +83,94 @@ export function Navbar() {
                 My Tickets
               </Link>
             )}
-            {isAuthenticated && dashboardLinks.map((link, index) => (
+            {isAuthenticated && primaryDashboard && (
               <Link
-                key={index}
-                to={link.path}
+                to={primaryDashboard.path}
                 className="text-white/70 hover:text-white transition-colors flex items-center gap-2"
               >
-                <link.icon className="w-4 h-4" />
-                {link.label}
+                <primaryDashboard.icon className="w-4 h-4" />
+                {primaryDashboard.label}
               </Link>
-            ))}
+            )}
           </div>
 
           {/* Auth Buttons */}
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-3">
             {isAuthenticated ? (
-              <div className="flex items-center gap-4">
-                <Link
-                  to="/profile"
-                  className="flex items-center gap-2 text-white/70 hover:text-white transition-colors"
-                >
-                  <User className="w-4 h-4" />
-                  <span>{user?.name || 'Profile'}</span>
-                </Link>
+              <div className="relative" ref={userMenuRef}>
                 <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-2 text-white/70 hover:text-white transition-colors"
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
                 >
-                  <LogOut className="w-4 h-4" />
-                  Logout
+                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                    <span className="text-primary font-medium text-sm">
+                      {user?.name?.charAt(0).toUpperCase() || 'U'}
+                    </span>
+                  </div>
+                  <span className="text-white text-sm font-medium max-w-[100px] truncate">
+                    {user?.name?.split(' ')[0] || 'User'}
+                  </span>
+                  <ChevronDown className={clsx('w-4 h-4 text-white/60 transition-transform', showUserMenu && 'rotate-180')} />
                 </button>
+
+                {/* Dropdown Menu */}
+                {showUserMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-gray-900 border border-white/10 rounded-xl shadow-xl overflow-hidden">
+                    <div className="p-3 border-b border-white/10">
+                      <p className="text-white font-medium truncate">{user?.name}</p>
+                      <p className="text-white/50 text-xs truncate">{user?.email}</p>
+                    </div>
+                    <div className="py-1">
+                      <Link
+                        to="/profile"
+                        onClick={() => setShowUserMenu(false)}
+                        className="flex items-center gap-3 px-4 py-2.5 text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+                      >
+                        <User className="w-4 h-4" />
+                        Profile
+                      </Link>
+                      <Link
+                        to="/tickets"
+                        onClick={() => setShowUserMenu(false)}
+                        className="flex items-center gap-3 px-4 py-2.5 text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+                      >
+                        <Ticket className="w-4 h-4" />
+                        My Tickets
+                      </Link>
+                      {primaryDashboard && (
+                        <Link
+                          to={primaryDashboard.path}
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex items-center gap-3 px-4 py-2.5 text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+                        >
+                          <primaryDashboard.icon className="w-4 h-4" />
+                          {primaryDashboard.label}
+                        </Link>
+                      )}
+                    </div>
+                    <div className="border-t border-white/10 py-1">
+                      <button
+                        onClick={handleLogout}
+                        className="flex items-center gap-3 px-4 py-2.5 w-full text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <>
                 <Link
                   to="/signin"
-                  className="text-white/70 hover:text-white transition-colors"
+                  className="text-white/70 hover:text-white transition-colors px-3 py-2"
                 >
                   Sign In
                 </Link>
                 <Link
                   to="/signin?mode=register"
-                  className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-colors"
+                  className="bg-primary hover:bg-primary-dark text-white px-5 py-2 rounded-lg transition-colors font-medium"
                 >
                   Get Started
                 </Link>
@@ -172,23 +219,15 @@ export function Navbar() {
               >
                 My Tickets
               </Link>
-              <Link
-                to="/shop/orders"
-                className="block text-white/70 hover:text-white transition-colors"
-                onClick={() => setIsOpen(false)}
-              >
-                Shop Orders
-              </Link>
-              {dashboardLinks.map((link, index) => (
+              {primaryDashboard && (
                 <Link
-                  key={index}
-                  to={link.path}
+                  to={primaryDashboard.path}
                   className="block text-white/70 hover:text-white transition-colors"
                   onClick={() => setIsOpen(false)}
                 >
-                  {link.label}
+                  {primaryDashboard.label}
                 </Link>
-              ))}
+              )}
               <Link
                 to="/profile"
                 className="block text-white/70 hover:text-white transition-colors"
@@ -196,15 +235,17 @@ export function Navbar() {
               >
                 Profile
               </Link>
-              <button
-                onClick={() => {
-                  handleLogout();
-                  setIsOpen(false);
-                }}
-                className="block text-white/70 hover:text-white transition-colors"
-              >
-                Logout
-              </button>
+              <div className="border-t border-white/10 pt-4 mt-2">
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setIsOpen(false);
+                  }}
+                  className="block text-red-400 hover:text-red-300 transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
             </>
           ) : (
             <>

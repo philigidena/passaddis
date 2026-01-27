@@ -216,6 +216,15 @@ export const authApi = {
 
   revokeSession: (sessionId: string) =>
     handleResponse<{ message: string }>(api.delete(`/auth/sessions/${sessionId}`)),
+
+  // Email verification
+  verifyEmail: (token: string) =>
+    handleResponse<{ message: string; success: boolean }>(
+      api.get(`/auth/verify-email?token=${encodeURIComponent(token)}`)
+    ),
+
+  resendVerification: (email: string) =>
+    handleResponse<{ message: string }>(api.post('/auth/resend-verification', { email })),
 };
 
 // ============== EVENTS API ==============
@@ -379,7 +388,7 @@ export const adminApi = {
     handleResponse<User>(api.patch(`/admin/users/${id}/role`, { role })),
 
   // Events
-  getAllEvents: (params?: { status?: string; search?: string; page?: number }) =>
+  getAllEvents: (params?: { status?: string; search?: string; page?: number; limit?: number }) =>
     handleResponse<PaginatedResponse<Event>>(api.get('/admin/events', { params })),
 
   getPendingEvents: (params?: { page?: number }) =>
@@ -403,6 +412,12 @@ export const adminApi = {
 
   suspendOrganizer: (id: string, reason: string) =>
     handleResponse<MerchantProfile>(api.post(`/admin/organizers/${id}/suspend`, { reason })),
+
+  rejectOrganizer: (id: string, reason: string) =>
+    handleResponse<MerchantProfile>(api.post(`/admin/organizers/${id}/reject`, { reason })),
+
+  reactivateOrganizer: (id: string) =>
+    handleResponse<MerchantProfile>(api.post(`/admin/organizers/${id}/reactivate`)),
 
   // Shop Owners
   getShopOwners: (params?: { status?: string; verified?: boolean; search?: string; page?: number; limit?: number }) =>

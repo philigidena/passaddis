@@ -20,10 +20,12 @@ export interface MerchantProfile {
   type: 'ORGANIZER' | 'SHOP' | 'SUPERMARKET' | 'VENDOR';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'BLOCKED';
   isVerified: boolean;
+  verifiedAt?: string;
   commissionRate: number;
   city: string;
   bankName?: string;
   bankAccount?: string;
+  createdAt?: string;
   user?: User;
 }
 

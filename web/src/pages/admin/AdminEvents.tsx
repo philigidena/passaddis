@@ -7,7 +7,10 @@ import {
   StatusBadge,
   DashboardButton,
 } from '@/components/layout/DashboardLayout';
+import { Pagination } from '@/components/ui/Pagination';
 import type { Event } from '@/types';
+
+const ITEMS_PER_PAGE = 10;
 
 // Icons (same as AdminDashboard)
 const DashboardIcon = () => (
@@ -80,8 +83,11 @@ export function AdminEvents() {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
 
   const statusFilter = searchParams.get('status') || '';
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
 
   useEffect(() => {
     if (!authLoading && user?.role !== 'ADMIN') {
@@ -90,23 +96,36 @@ export function AdminEvents() {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    loadEvents();
+    setCurrentPage(1); // Reset to first page when filter changes
   }, [statusFilter]);
+
+  useEffect(() => {
+    loadEvents();
+  }, [statusFilter, currentPage]);
 
   const loadEvents = async () => {
     setLoading(true);
     try {
       const response = await adminApi.getAllEvents({
         status: statusFilter || undefined,
+        page: currentPage,
+        limit: ITEMS_PER_PAGE,
       });
       if (response.data) {
-        setEvents((response.data as any).data || []);
+        const data = response.data as any;
+        setEvents(data.data || []);
+        setTotalItems(data.total || data.data?.length || 0);
       }
     } catch (error) {
       console.error('Failed to load events:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleApprove = async (event: Event, featured = false) => {
@@ -199,6 +218,7 @@ export function AdminEvents() {
             No events found
           </div>
         ) : (
+          <>
           <div className="divide-y divide-gray-700">
             {events.map((event) => (
               <div key={event.id} className="p-4 lg:p-6">
@@ -331,6 +351,16 @@ export function AdminEvents() {
               </div>
             ))}
           </div>
+
+          {/* Pagination */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            totalItems={totalItems}
+            itemsPerPage={ITEMS_PER_PAGE}
+          />
+          </>
         )}
       </div>
 

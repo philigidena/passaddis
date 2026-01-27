@@ -55,22 +55,21 @@ export function OrganizerDashboard() {
   const [merchantStatus, setMerchantStatus] = useState<MerchantStatus>(null);
 
   useEffect(() => {
-    if (!authLoading && !['ORGANIZER', 'ADMIN'].includes(user?.role || '')) {
-      // Check if user wants to become an organizer
-      if (user?.role === 'USER') {
-        setNeedsProfile(true);
-        setLoading(false);
-      } else {
-        navigate('/');
-      }
+    // Wait for auth to finish loading
+    if (authLoading) return;
+
+    // If user has ORGANIZER or ADMIN role, load the dashboard
+    if (['ORGANIZER', 'ADMIN'].includes(user?.role || '')) {
+      loadDashboard();
+    } else if (user?.role === 'USER' || user?.role === 'SHOP_OWNER') {
+      // User wants to become an organizer - show the onboarding view
+      setNeedsProfile(true);
+      setLoading(false);
+    } else {
+      // Unknown role or not logged in, redirect to home
+      navigate('/');
     }
   }, [user, authLoading, navigate]);
-
-  useEffect(() => {
-    if (user?.role === 'ORGANIZER' || user?.role === 'ADMIN') {
-      loadDashboard();
-    }
-  }, [user]);
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -85,7 +84,7 @@ export function OrganizerDashboard() {
         setNeedsProfile(false);
 
         // Check merchant status from profile
-        const status = dashboardRes.data.profile?.status;
+        const status = dashboardRes.data.profile?.status as MerchantStatus;
         if (status) {
           setMerchantStatus(status);
         } else {

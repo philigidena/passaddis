@@ -125,6 +125,20 @@ export class AdminController {
     return this.adminService.suspendOrganizer(id, reason);
   }
 
+  @Post('organizers/:id/reject')
+  async rejectOrganizer(
+    @Param('id') id: string,
+    @CurrentUser('id') adminId: string,
+    @Body('reason') reason: string,
+  ) {
+    return this.adminService.rejectOrganizer(id, adminId, reason);
+  }
+
+  @Post('organizers/:id/reactivate')
+  async reactivateOrganizer(@Param('id') id: string) {
+    return this.adminService.reactivateOrganizer(id);
+  }
+
   // ==================== SHOP OWNER MANAGEMENT ====================
 
   @Get('shop-owners')

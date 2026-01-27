@@ -545,6 +545,64 @@ export class AdminService {
     });
   }
 
+  async rejectOrganizer(merchantId: string, adminId: string, reason: string) {
+    const merchant = await this.prisma.merchant.findFirst({
+      where: { id: merchantId, type: 'ORGANIZER' },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer not found');
+    }
+
+    if (merchant.status !== 'PENDING') {
+      throw new BadRequestException('Only pending organizers can be rejected');
+    }
+
+    // Update the user role back to USER
+    await this.prisma.user.update({
+      where: { id: merchant.userId },
+      data: { role: 'USER' },
+    });
+
+    return this.prisma.merchant.update({
+      where: { id: merchantId },
+      data: {
+        status: 'BLOCKED',
+      },
+      include: {
+        user: {
+          select: { name: true, email: true, phone: true },
+        },
+      },
+    });
+  }
+
+  async reactivateOrganizer(merchantId: string) {
+    const merchant = await this.prisma.merchant.findFirst({
+      where: { id: merchantId, type: 'ORGANIZER' },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer not found');
+    }
+
+    if (merchant.status !== 'SUSPENDED') {
+      throw new BadRequestException('Only suspended organizers can be reactivated');
+    }
+
+    return this.prisma.merchant.update({
+      where: { id: merchantId },
+      data: {
+        status: 'ACTIVE',
+      },
+      include: {
+        user: {
+          select: { name: true, email: true, phone: true },
+        },
+      },
+    });
+  }
+
   // ==================== SHOP OWNER MANAGEMENT ====================
 
   async getShopOwners(query: ShopOwnerQueryDto) {

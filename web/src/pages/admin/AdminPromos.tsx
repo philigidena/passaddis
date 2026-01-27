@@ -9,6 +9,9 @@ import {
 } from '@/components/layout/DashboardLayout';
 import { Skeleton, TableRowSkeleton } from '@/components/ui/Skeleton';
 import { ErrorMessage, EmptyState } from '@/components/ui/ErrorBoundary';
+import { Pagination } from '@/components/ui/Pagination';
+
+const ITEMS_PER_PAGE = 10;
 
 // Icons
 const DashboardIcon = () => (
@@ -106,6 +109,10 @@ export function AdminPromos() {
   const [selectedPromo, setSelectedPromo] = useState<PromoCode | null>(null);
   const [saving, setSaving] = useState(false);
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
 
   const [form, setForm] = useState<PromoFormData>({
     code: '',
@@ -127,22 +134,38 @@ export function AdminPromos() {
   }, [currentUser, authLoading, navigate]);
 
   useEffect(() => {
-    fetchPromos();
+    setCurrentPage(1); // Reset to first page when filter changes
   }, [filterActive]);
+
+  useEffect(() => {
+    fetchPromos();
+  }, [filterActive, currentPage]);
 
   const fetchPromos = async () => {
     try {
       setLoading(true);
       setError(null);
-      const params = filterActive !== 'all' ? `?isActive=${filterActive === 'active'}` : '';
-      const response = await api.get(`/promo${params}`);
-      setPromos(response.data.data || []);
+      const queryParams = new URLSearchParams();
+      if (filterActive !== 'all') {
+        queryParams.append('isActive', String(filterActive === 'active'));
+      }
+      queryParams.append('page', String(currentPage));
+      queryParams.append('limit', String(ITEMS_PER_PAGE));
+      const response = await api.get(`/promo?${queryParams.toString()}`);
+      const data = response.data;
+      setPromos(data.data || []);
+      setTotalItems(data.total || data.data?.length || 0);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load promo codes';
       setError(errorMessage);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -422,6 +445,15 @@ export function AdminPromos() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination */}
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              totalItems={totalItems}
+              itemsPerPage={ITEMS_PER_PAGE}
+            />
           </div>
         )}
       </div>

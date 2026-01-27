@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { ToastProvider } from '@/components/ui/Toast';
 import { ScrollToTop } from '@/components/ScrollToTop';
 import { HomePage } from '@/pages/Home';
 import { EventsPage } from '@/pages/Events';
@@ -9,6 +10,8 @@ import { EventDetailPage } from '@/pages/EventDetail';
 import { SignInPage } from '@/pages/SignIn';
 import { ForgotPasswordPage } from '@/pages/ForgotPassword';
 import { ResetPasswordPage } from '@/pages/ResetPassword';
+import { VerifyEmail } from '@/pages/auth/VerifyEmail';
+import { ResendVerification } from '@/pages/auth/ResendVerification';
 import { TicketsPage } from '@/pages/Tickets';
 import { TicketDetailPage } from '@/pages/TicketDetail';
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
@@ -88,6 +91,8 @@ function AppRoutes() {
       <Route path="/login" element={<Navigate to="/signin" replace />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/resend-verification" element={<ResendVerification />} />
 
       {/* Protected User Routes */}
       <Route
@@ -310,10 +315,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <BrowserRouter>
-          <ScrollToTop />
-          <AppRoutes />
-        </BrowserRouter>
+        <ToastProvider>
+          <BrowserRouter>
+            <ScrollToTop />
+            <AppRoutes />
+          </BrowserRouter>
+        </ToastProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

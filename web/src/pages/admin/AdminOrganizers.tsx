@@ -7,6 +7,8 @@ import {
   StatusBadge,
   DashboardButton,
 } from '@/components/layout/DashboardLayout';
+import { useToast } from '@/components/ui/Toast';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { MerchantProfile } from '@/types';
 
 // Icons
@@ -73,6 +75,7 @@ export function AdminOrganizers() {
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { showToast } = useToast();
 
   const [organizers, setOrganizers] = useState<MerchantProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,8 +83,19 @@ export function AdminOrganizers() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [suspendReason, setSuspendReason] = useState('');
+  const [rejectReason, setRejectReason] = useState('');
   const [showSuspendModal, setShowSuspendModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
   const [commissionRate, setCommissionRate] = useState(5);
+
+  // Confirmation dialogs
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: 'danger' | 'warning' | 'info';
+    onConfirm: () => void;
+  }>({ isOpen: false, title: '', message: '', variant: 'info', onConfirm: () => {} });
 
   const statusFilter = searchParams.get('status') || '';
   const verifiedFilter = searchParams.get('verified');
@@ -121,29 +135,42 @@ export function AdminOrganizers() {
   };
 
   const handleVerify = async (organizerId: string) => {
-    setActionLoading(organizerId);
-    try {
-      const response = await adminApi.verifyOrganizer(organizerId, commissionRate);
-      if (response.data) {
-        setOrganizers(organizers.map(o =>
-          o.id === organizerId
-            ? { ...o, isVerified: true, status: 'ACTIVE' as const, commissionRate }
-            : o
-        ));
-        if (selectedOrganizer?.id === organizerId) {
-          setSelectedOrganizer({ ...selectedOrganizer, isVerified: true, status: 'ACTIVE' as const, commissionRate });
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Verify Organizer',
+      message: `Are you sure you want to verify this organizer with a ${commissionRate}% commission rate?`,
+      variant: 'info',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setActionLoading(organizerId);
+        try {
+          const response = await adminApi.verifyOrganizer(organizerId, commissionRate);
+          if (response.data) {
+            setOrganizers(organizers.map(o =>
+              o.id === organizerId
+                ? { ...o, isVerified: true, status: 'ACTIVE' as const, commissionRate }
+                : o
+            ));
+            if (selectedOrganizer?.id === organizerId) {
+              setSelectedOrganizer({ ...selectedOrganizer, isVerified: true, status: 'ACTIVE' as const, commissionRate });
+            }
+            showToast('Organizer verified successfully', 'success');
+          }
+        } catch (error) {
+          console.error('Failed to verify organizer:', error);
+          showToast('Failed to verify organizer', 'error');
+        } finally {
+          setActionLoading(null);
         }
       }
-    } catch (error) {
-      console.error('Failed to verify organizer:', error);
-      alert('Failed to verify organizer');
-    } finally {
-      setActionLoading(null);
-    }
+    });
   };
 
   const handleSuspend = async () => {
-    if (!selectedOrganizer || !suspendReason.trim()) return;
+    if (!selectedOrganizer || !suspendReason.trim()) {
+      showToast('Please provide a reason for suspension', 'error');
+      return;
+    }
 
     setActionLoading(selectedOrganizer.id);
     try {
@@ -157,13 +184,70 @@ export function AdminOrganizers() {
         setSelectedOrganizer({ ...selectedOrganizer, status: 'SUSPENDED' as const });
         setShowSuspendModal(false);
         setSuspendReason('');
+        showToast('Organizer suspended successfully', 'success');
       }
     } catch (error) {
       console.error('Failed to suspend organizer:', error);
-      alert('Failed to suspend organizer');
+      showToast('Failed to suspend organizer', 'error');
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const handleReject = async () => {
+    if (!selectedOrganizer || !rejectReason.trim()) {
+      showToast('Please provide a reason for rejection', 'error');
+      return;
+    }
+
+    setActionLoading(selectedOrganizer.id);
+    try {
+      const response = await adminApi.rejectOrganizer(selectedOrganizer.id, rejectReason);
+      if (response.data) {
+        setOrganizers(organizers.filter(o => o.id !== selectedOrganizer.id));
+        setSelectedOrganizer(null);
+        setShowRejectModal(false);
+        setRejectReason('');
+        showToast('Organizer application rejected', 'success');
+      }
+    } catch (error) {
+      console.error('Failed to reject organizer:', error);
+      showToast('Failed to reject organizer', 'error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReactivate = async (organizerId: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Reactivate Organizer',
+      message: 'Are you sure you want to reactivate this suspended organizer?',
+      variant: 'info',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setActionLoading(organizerId);
+        try {
+          const response = await adminApi.reactivateOrganizer(organizerId);
+          if (response.data) {
+            setOrganizers(organizers.map(o =>
+              o.id === organizerId
+                ? { ...o, status: 'ACTIVE' as const }
+                : o
+            ));
+            if (selectedOrganizer?.id === organizerId) {
+              setSelectedOrganizer({ ...selectedOrganizer, status: 'ACTIVE' as const });
+            }
+            showToast('Organizer reactivated successfully', 'success');
+          }
+        } catch (error) {
+          console.error('Failed to reactivate organizer:', error);
+          showToast('Failed to reactivate organizer', 'error');
+        } finally {
+          setActionLoading(null);
+        }
+      }
+    });
   };
 
   const getStatusVariant = (status: string) => {
@@ -271,7 +355,7 @@ export function AdminOrganizers() {
                   )}
                   <div>
                     <h3 className="font-semibold text-white">{organizer.businessName}</h3>
-                    <p className="text-sm text-gray-400">{organizer.tradeName || organizer.city}</p>
+                    <p className="text-sm text-gray-400">{organizer.city}</p>
                   </div>
                 </div>
                 <StatusBadge
@@ -306,7 +390,7 @@ export function AdminOrganizers() {
                 >
                   View Details
                 </DashboardButton>
-                {!organizer.isVerified && organizer.status === 'PENDING' && (
+                {organizer.status === 'PENDING' && (
                   <DashboardButton
                     onClick={() => handleVerify(organizer.id)}
                     variant="primary"
@@ -314,6 +398,16 @@ export function AdminOrganizers() {
                     disabled={actionLoading === organizer.id}
                   >
                     {actionLoading === organizer.id ? '...' : 'Verify'}
+                  </DashboardButton>
+                )}
+                {organizer.status === 'SUSPENDED' && (
+                  <DashboardButton
+                    onClick={() => handleReactivate(organizer.id)}
+                    variant="primary"
+                    size="sm"
+                    disabled={actionLoading === organizer.id}
+                  >
+                    {actionLoading === organizer.id ? '...' : 'Reactivate'}
                   </DashboardButton>
                 )}
               </div>
@@ -398,6 +492,34 @@ export function AdminOrganizers() {
                 </div>
 
                 <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-2">VERIFICATION STATUS</h4>
+                  <div className="bg-gray-700/50 rounded-lg p-4 space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Status</span>
+                      <StatusBadge status={selectedOrganizer.status} variant={getStatusVariant(selectedOrganizer.status)} />
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Verified</span>
+                      <span className={selectedOrganizer.isVerified ? 'text-green-400' : 'text-yellow-400'}>
+                        {selectedOrganizer.isVerified ? 'Yes' : 'No'}
+                      </span>
+                    </div>
+                    {selectedOrganizer.verifiedAt && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Verified At</span>
+                        <span className="text-white text-sm">{new Date(selectedOrganizer.verifiedAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {selectedOrganizer.createdAt && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Created At</span>
+                        <span className="text-white text-sm">{new Date(selectedOrganizer.createdAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
                   <h4 className="text-sm font-medium text-gray-400 mb-2">COMMISSION</h4>
                   <div className="bg-gray-700/50 rounded-lg p-4">
                     <div className="flex items-center justify-between">
@@ -449,15 +571,24 @@ export function AdminOrganizers() {
 
               {/* Actions */}
               <div className="flex gap-3">
-                {!selectedOrganizer.isVerified && selectedOrganizer.status === 'PENDING' && (
-                  <DashboardButton
-                    onClick={() => handleVerify(selectedOrganizer.id)}
-                    variant="primary"
-                    className="flex-1"
-                    disabled={actionLoading === selectedOrganizer.id}
-                  >
-                    {actionLoading === selectedOrganizer.id ? 'Verifying...' : 'Verify Organizer'}
-                  </DashboardButton>
+                {selectedOrganizer.status === 'PENDING' && (
+                  <>
+                    <DashboardButton
+                      onClick={() => handleVerify(selectedOrganizer.id)}
+                      variant="primary"
+                      className="flex-1"
+                      disabled={actionLoading === selectedOrganizer.id}
+                    >
+                      {actionLoading === selectedOrganizer.id ? 'Verifying...' : 'Verify'}
+                    </DashboardButton>
+                    <DashboardButton
+                      onClick={() => setShowRejectModal(true)}
+                      variant="outline"
+                      className="flex-1 !border-red-500 !text-red-400 hover:!bg-red-500/10"
+                    >
+                      Reject
+                    </DashboardButton>
+                  </>
                 )}
                 {selectedOrganizer.status === 'ACTIVE' && (
                   <DashboardButton
@@ -468,12 +599,23 @@ export function AdminOrganizers() {
                     Suspend
                   </DashboardButton>
                 )}
+                {selectedOrganizer.status === 'SUSPENDED' && (
+                  <DashboardButton
+                    onClick={() => handleReactivate(selectedOrganizer.id)}
+                    variant="primary"
+                    className="flex-1"
+                    disabled={actionLoading === selectedOrganizer.id}
+                  >
+                    {actionLoading === selectedOrganizer.id ? 'Reactivating...' : 'Reactivate'}
+                  </DashboardButton>
+                )}
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* Suspend Modal */}
       {/* Suspend Modal */}
       {showSuspendModal && selectedOrganizer && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -517,6 +659,61 @@ export function AdminOrganizers() {
           </div>
         </div>
       )}
+
+      {/* Reject Modal */}
+      {showRejectModal && selectedOrganizer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl border border-gray-700 w-full max-w-md">
+            <div className="p-6 border-b border-gray-700">
+              <h2 className="text-xl font-bold text-white">Reject Application</h2>
+              <p className="text-gray-400 mt-1">Rejecting will deny this organizer application.</p>
+            </div>
+            <div className="p-6">
+              <label className="block text-sm font-medium text-gray-400 mb-2">
+                Reason for Rejection
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Explain why this application is being rejected..."
+                className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-red-500 resize-none"
+                rows={4}
+              />
+              <div className="flex gap-3 mt-6">
+                <DashboardButton
+                  onClick={() => {
+                    setShowRejectModal(false);
+                    setRejectReason('');
+                  }}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Cancel
+                </DashboardButton>
+                <DashboardButton
+                  onClick={handleReject}
+                  variant="primary"
+                  className="flex-1 !bg-red-500 hover:!bg-red-600"
+                  disabled={!rejectReason.trim() || actionLoading === selectedOrganizer.id}
+                >
+                  {actionLoading === selectedOrganizer.id ? 'Rejecting...' : 'Confirm Reject'}
+                </DashboardButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        variant={confirmDialog.variant}
+        isLoading={actionLoading !== null}
+      />
     </DashboardLayout>
   );
 }
