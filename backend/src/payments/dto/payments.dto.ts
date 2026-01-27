@@ -1,8 +1,7 @@
-import { IsString, IsNotEmpty, IsNumber, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
 
 export enum PaymentMethod {
-  CHAPA = 'CHAPA',           // Recommended: Payment facilitator
-  TELEBIRR = 'TELEBIRR',     // Future: Direct integration
+  TELEBIRR = 'TELEBIRR',     // Primary: Direct Telebirr integration
   CBE_BIRR = 'CBE_BIRR',     // Future: Direct integration
   BANK_TRANSFER = 'BANK_TRANSFER',
 }
@@ -12,8 +11,9 @@ export class InitiatePaymentDto {
   @IsNotEmpty()
   orderId: string;
 
+  @IsOptional()
   @IsEnum(PaymentMethod)
-  method: PaymentMethod;
+  method?: PaymentMethod = PaymentMethod.TELEBIRR;
 }
 
 export class PaymentCallbackDto {
@@ -29,12 +29,28 @@ export class PaymentCallbackDto {
   status: string;
 }
 
+/**
+ * Telebirr callback/notification DTO
+ * Telebirr may send fields in different formats (camelCase or snake_case)
+ */
 export class TelebirrCallbackDto {
-  outTradeNo: string;
-  transactionNo: string;
-  totalAmount: string;
-  tradeStatus: string;
-  msisdn: string;
+  // camelCase format
+  outTradeNo?: string;
+  transactionNo?: string;
+  totalAmount?: string;
+  tradeStatus?: string;
+  msisdn?: string;
+
+  // snake_case format (alternative)
+  merch_order_id?: string;
+  transaction_no?: string;
+  total_amount?: string;
+  trade_status?: string;
+
+  // Common fields
+  callback_info?: string;
+  sign?: string;
+  timestamp?: string;
 }
 
 export class CbeBirrCallbackDto {
@@ -43,20 +59,4 @@ export class CbeBirrCallbackDto {
   amount: string;
   status: string;
   transactionId: string;
-}
-
-// Chapa webhook payload
-export class ChapaWebhookDto {
-  event: string;
-  tx_ref: string;
-  status: string;
-  amount: number;
-  currency: string;
-  charge: number;
-  payment_method: string;
-  reference: string;
-  first_name?: string;
-  last_name?: string;
-  email?: string;
-  created_at: string;
 }

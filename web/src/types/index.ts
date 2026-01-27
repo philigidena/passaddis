@@ -195,7 +195,7 @@ export interface PaymentInitiation {
   tx_ref?: string;
 }
 
-export type PaymentMethod = 'CHAPA' | 'TELEBIRR' | 'CBE_BIRR' | 'BANK_TRANSFER';
+export type PaymentMethod = 'TELEBIRR' | 'CBE_BIRR' | 'BANK_TRANSFER';
 
 // Shop types
 export interface ShopItem {

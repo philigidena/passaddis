@@ -5,19 +5,15 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { ChapaProvider } from './providers/chapa.provider';
-import { TelebirrProvider } from './providers/telebirr.provider';
-import { CbeBirrProvider } from './providers/cbe-birr.provider';
+import { TelebirrProvider, TelebirrCallbackData } from './providers/telebirr.provider';
 import {
   InitiatePaymentDto,
   PaymentMethod,
   TelebirrCallbackDto,
-  CbeBirrCallbackDto,
-  ChapaWebhookDto,
 } from './dto/payments.dto';
 
-// Payment method type for SQLite (string instead of enum)
-type PaymentMethodString = 'CHAPA' | 'TELEBIRR' | 'CBE_BIRR' | 'BANK_TRANSFER';
+// Payment method type for database
+type PaymentMethodString = 'TELEBIRR' | 'CBE_BIRR' | 'BANK_TRANSFER';
 
 @Injectable()
 export class PaymentsService {
@@ -27,16 +23,17 @@ export class PaymentsService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
-    private chapaProvider: ChapaProvider,
     private telebirrProvider: TelebirrProvider,
-    private cbeBirrProvider: CbeBirrProvider,
   ) {
     this.frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:8081';
     this.apiUrl = this.configService.get<string>('API_URL') || `http://localhost:${this.configService.get<string>('PORT') || 3000}`;
   }
 
-  // Initiate payment for an order
+  /**
+   * Initiate payment for an order
+   * Uses Telebirr WebCheckout - returns a URL to open in browser/WebView
+   */
   async initiatePayment(userId: string, dto: InitiatePaymentDto) {
     const order = await this.prisma.order.findUnique({
       where: { id: dto.orderId },
@@ -66,7 +63,7 @@ export class PaymentsService {
       throw new BadRequestException('Order is not pending payment');
     }
 
-    // Check if payment already exists
+    // Check if payment already exists and is completed
     const existingPayment = await this.prisma.payment.findUnique({
       where: { orderId: order.id },
     });
@@ -75,14 +72,14 @@ export class PaymentsService {
       throw new BadRequestException('Order already paid');
     }
 
-    // Generate description (Chapa only allows letters, numbers, hyphens, underscores, spaces, dots)
-    let description = 'PassAddis Order';
+    // Generate title for Telebirr
+    let title = 'PassAddis Order';
     if (order.tickets.length > 0) {
-      const eventTitle = order.tickets[0].event.title.replace(/[^a-zA-Z0-9\-_\s.]/g, '');
-      description = `Tickets for ${eventTitle}`;
+      const eventTitle = order.tickets[0].event.title.substring(0, 50);
+      title = `Tickets - ${eventTitle}`;
     } else if (order.items.length > 0) {
-      const itemNames = order.items.map((i) => i.shopItem.name.replace(/[^a-zA-Z0-9\-_\s.]/g, '')).join(' and ');
-      description = `Shop order ${itemNames}`;
+      const itemName = order.items[0].shopItem.name.substring(0, 50);
+      title = `Shop - ${itemName}`;
     }
 
     // Create or update payment record
@@ -91,238 +88,108 @@ export class PaymentsService {
       create: {
         orderId: order.id,
         amount: order.total,
-        method: dto.method as PaymentMethodString,
+        method: 'TELEBIRR' as PaymentMethodString,
         status: 'PENDING',
       },
       update: {
-        method: dto.method as PaymentMethodString,
+        method: 'TELEBIRR' as PaymentMethodString,
         status: 'PENDING',
       },
     });
 
-    // Initiate payment with provider
-    const notifyUrl = `${this.apiUrl}/api/payments/callback/${dto.method.toLowerCase()}`;
+    // URLs for Telebirr
+    const notifyUrl = `${this.apiUrl}/api/payments/callback/telebirr`;
+
     // Return URL based on order type (ticket vs shop)
     const isTicketOrder = order.tickets.length > 0;
     const returnUrl = isTicketOrder
-      ? `${this.frontendUrl}/tickets`
-      : `${this.frontendUrl}/shop/orders/${order.id}`;
+      ? `${this.frontendUrl}/tickets?payment_status=success&order_id=${order.id}`
+      : `${this.frontendUrl}/shop/orders/${order.id}?payment_status=success`;
 
-    let result;
+    // Initiate Telebirr payment
+    const result = await this.telebirrProvider.initiatePayment({
+      amount: order.total,
+      orderId: order.id,
+      title: title,
+      notifyUrl: notifyUrl,
+      returnUrl: returnUrl,
+      callbackInfo: `Order:${order.id}`,
+    });
 
-    // Use Chapa as the primary payment method (handles Telebirr, CBE, Banks)
-    if (dto.method === PaymentMethod.CHAPA) {
-      // Get user phone for Chapa
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { phone: true, email: true },
-      });
-
-      result = await this.chapaProvider.initiatePayment({
-        amount: order.total,
-        currency: 'ETB',
-        phone: user?.phone || '',
-        email: user?.email || undefined,
-        tx_ref: payment.id,
-        callback_url: `${this.apiUrl}/api/payments/callback/chapa`,
-        return_url: returnUrl,
-        customization: {
-          title: 'PassAddis Pay',
-          description: description,
-        },
-      });
-
-      if (result.success && result.tx_ref) {
-        await this.prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            providerRef: result.tx_ref,
-            status: 'PROCESSING',
-          },
-        });
-      }
-    } else if (dto.method === PaymentMethod.TELEBIRR) {
-      // Direct Telebirr (future - when you have merchant account)
-      result = await this.telebirrProvider.initiatePayment({
-        amount: order.total,
-        orderId: order.id,
-        subject: description,
-        notifyUrl,
-        returnUrl,
-      });
-
-      if (result.success && result.outTradeNo) {
-        await this.prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            providerRef: result.outTradeNo,
-            status: 'PROCESSING',
-          },
-        });
-      }
-    } else if (dto.method === PaymentMethod.CBE_BIRR) {
-      // Direct CBE Birr (future)
-      result = await this.cbeBirrProvider.initiatePayment({
-        amount: order.total,
-        orderId: order.id,
-        description,
-        notifyUrl,
-        returnUrl,
-      });
-
-      if (result.success && result.referenceId) {
-        await this.prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            providerRef: result.referenceId,
-            status: 'PROCESSING',
-          },
-        });
-      }
-    } else {
-      throw new BadRequestException('Unsupported payment method');
-    }
-
-    // Check if payment initiation was successful
     if (!result.success) {
+      console.error('❌ Telebirr payment initiation failed:', result.error);
       throw new BadRequestException(result.error || 'Payment initialization failed');
     }
 
-    // Normalize the checkout URL from different providers
-    const checkoutUrl = 'checkout_url' in result ? result.checkout_url :
-                        'paymentUrl' in result ? result.paymentUrl : undefined;
+    // Update payment with Telebirr reference
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        providerRef: result.outTradeNo,
+        status: 'PROCESSING',
+        providerData: {
+          prepayId: result.prepayId,
+          rawRequest: result.rawRequest,
+        } as any,
+      },
+    });
 
-    // Normalize the transaction reference from different providers
-    const txRef = 'tx_ref' in result ? result.tx_ref :
-                  'outTradeNo' in result ? result.outTradeNo :
-                  'referenceId' in result ? result.referenceId : undefined;
+    console.log(`✅ Telebirr payment initiated for order ${order.id}: ${result.outTradeNo}`);
 
     return {
       paymentId: payment.id,
       orderId: order.id,
       amount: order.total,
-      method: dto.method,
-      checkout_url: checkoutUrl,
-      tx_ref: txRef,
+      method: 'TELEBIRR',
+      checkout_url: result.checkoutUrl,
+      tx_ref: result.outTradeNo,
     };
   }
 
-  // Handle Telebirr callback
+  /**
+   * Handle Telebirr callback/webhook
+   * Called by Telebirr after payment completion
+   */
   async handleTelebirrCallback(data: TelebirrCallbackDto) {
-    const verified = await this.telebirrProvider.verifyCallback(data);
+    console.log('📱 Processing Telebirr callback:', JSON.stringify(data, null, 2));
+
+    // Normalize field names (Telebirr may use different formats)
+    const outTradeNo = data.outTradeNo || data.merch_order_id;
+    const transactionNo = data.transactionNo || data.transaction_no;
+    const tradeStatus = data.tradeStatus || data.trade_status;
+    const totalAmount = data.totalAmount || data.total_amount;
+
+    if (!outTradeNo) {
+      console.error('❌ Missing order reference in Telebirr callback');
+      return { success: false, message: 'Missing order reference' };
+    }
+
+    // Verify callback signature
+    const verified = await this.telebirrProvider.verifyCallback(data as TelebirrCallbackData);
     if (!verified) {
-      console.error('Telebirr callback verification failed');
-      return { success: false };
+      console.error('❌ Telebirr callback verification failed');
+      return { success: false, message: 'Verification failed' };
     }
 
+    // Find payment by provider reference
     const payment = await this.prisma.payment.findFirst({
-      where: { providerRef: data.outTradeNo },
+      where: { providerRef: outTradeNo },
+      include: { order: true },
     });
 
     if (!payment) {
-      console.error('Payment not found for Telebirr callback:', data.outTradeNo);
-      return { success: false };
+      console.error('❌ Payment not found for Telebirr callback:', outTradeNo);
+      return { success: false, message: 'Payment not found' };
     }
 
-    const isSuccess = data.tradeStatus === 'SUCCESS' || data.tradeStatus === '2';
+    // Check trade status - Telebirr uses "Completed", "2", or "SUCCESS"
+    const isSuccess =
+      tradeStatus === 'Completed' ||
+      tradeStatus === 'SUCCESS' ||
+      tradeStatus === '2' ||
+      tradeStatus === 'TRADE_SUCCESS';
 
-    await this.prisma.$transaction([
-      this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: isSuccess ? 'COMPLETED' : 'FAILED',
-          providerData: data as any,
-        },
-      }),
-      this.prisma.order.update({
-        where: { id: payment.orderId },
-        data: {
-          status: isSuccess ? 'PAID' : 'PENDING',
-          paymentMethod: 'TELEBIRR',
-          paymentRef: data.transactionNo,
-        },
-      }),
-    ]);
-
-    return { success: true };
-  }
-
-  // Handle CBE Birr callback
-  async handleCbeBirrCallback(data: CbeBirrCallbackDto) {
-    const verified = await this.cbeBirrProvider.verifyCallback(data);
-    if (!verified) {
-      console.error('CBE Birr callback verification failed');
-      return { success: false };
-    }
-
-    const payment = await this.prisma.payment.findFirst({
-      where: { providerRef: data.referenceId },
-    });
-
-    if (!payment) {
-      console.error('Payment not found for CBE callback:', data.referenceId);
-      return { success: false };
-    }
-
-    const isSuccess = data.status === 'SUCCESS' || data.status === 'COMPLETED';
-
-    await this.prisma.$transaction([
-      this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: isSuccess ? 'COMPLETED' : 'FAILED',
-          providerData: data as any,
-        },
-      }),
-      this.prisma.order.update({
-        where: { id: payment.orderId },
-        data: {
-          status: isSuccess ? 'PAID' : 'PENDING',
-          paymentMethod: 'CBE_BIRR',
-          paymentRef: data.transactionId,
-        },
-      }),
-    ]);
-
-    return { success: true };
-  }
-
-  // Handle Chapa webhook callback
-  async handleChapaWebhook(data: ChapaWebhookDto, signature?: string) {
-    // Optionally verify webhook signature
-    if (signature) {
-      const isValid = this.chapaProvider.verifyWebhook(
-        signature,
-        JSON.stringify(data),
-      );
-      if (!isValid) {
-        console.error('Chapa webhook signature verification failed');
-        return { success: false };
-      }
-    }
-
-    // Find payment by tx_ref (which is our payment.id)
-    const payment = await this.prisma.payment.findUnique({
-      where: { id: data.tx_ref },
-    });
-
-    if (!payment) {
-      console.error('Payment not found for Chapa webhook:', data.tx_ref);
-      return { success: false };
-    }
-
-    const isSuccess = data.status === 'success';
-
-    // Map Chapa payment method to our type
-    let paymentMethod: PaymentMethodString = 'CHAPA';
-    if (data.payment_method) {
-      const method = data.payment_method.toLowerCase();
-      if (method.includes('telebirr')) {
-        paymentMethod = 'TELEBIRR';
-      } else if (method.includes('cbe')) {
-        paymentMethod = 'CBE_BIRR';
-      }
-    }
+    console.log(`📱 Telebirr payment ${isSuccess ? 'SUCCEEDED' : 'FAILED'}: ${outTradeNo}`);
 
     // Update payment and order status
     await this.prisma.$transaction(async (tx) => {
@@ -330,7 +197,6 @@ export class PaymentsService {
         where: { id: payment.id },
         data: {
           status: isSuccess ? 'COMPLETED' : 'FAILED',
-          providerRef: data.reference,
           providerData: data as any,
         },
       });
@@ -339,8 +205,8 @@ export class PaymentsService {
         where: { id: payment.orderId },
         data: {
           status: isSuccess ? 'PAID' : 'PENDING',
-          paymentMethod: paymentMethod,
-          paymentRef: data.reference,
+          paymentMethod: 'TELEBIRR',
+          paymentRef: transactionNo || outTradeNo,
         },
       });
 
@@ -352,7 +218,6 @@ export class PaymentsService {
         });
 
         if (order && order.items.length > 0) {
-          // This is a shop order - deduct stock
           for (const item of order.items) {
             await tx.shopItem.update({
               where: { id: item.shopItemId },
@@ -361,19 +226,19 @@ export class PaymentsService {
               },
             });
           }
+          console.log(`📦 Stock deducted for order ${order.id}`);
         }
       }
     });
 
-    console.log(
-      `Chapa payment ${isSuccess ? 'succeeded' : 'failed'}: ${data.tx_ref}`,
-    );
-
-    return { success: true };
+    return { success: true, message: 'Payment processed' };
   }
 
-  // Verify Chapa payment (can be called from frontend)
-  async verifyChapaPayment(userId: string, orderId: string) {
+  /**
+   * Verify payment status with Telebirr
+   * Can be called from frontend to poll for payment completion
+   */
+  async verifyPayment(userId: string, orderId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { payment: true },
@@ -391,39 +256,79 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found');
     }
 
-    // Verify with Chapa
-    const verification = await this.chapaProvider.verifyPayment(order.payment.id);
-
-    if (verification.status === 'success' && verification.data?.status === 'success') {
-      // Update payment if not already completed
-      if (order.payment.status !== 'COMPLETED') {
-        await this.prisma.$transaction([
-          this.prisma.payment.update({
-            where: { id: order.payment.id },
-            data: {
-              status: 'COMPLETED',
-              providerRef: verification.data.reference,
-              providerData: verification.data,
-            },
-          }),
-          this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              status: 'PAID',
-              paymentRef: verification.data.reference,
-            },
-          }),
-        ]);
-      }
-
+    // If already completed, return success
+    if (order.payment.status === 'COMPLETED') {
       return {
         verified: true,
         status: 'COMPLETED',
         order: {
           id: order.id,
-          status: 'PAID',
+          status: order.status,
         },
       };
+    }
+
+    // Query Telebirr for current status
+    if (order.payment.providerRef) {
+      const queryResult = await this.telebirrProvider.queryPaymentStatus(order.payment.providerRef);
+
+      console.log('📱 Telebirr status query result:', JSON.stringify(queryResult, null, 2));
+
+      // Check if payment completed
+      const tradeStatus = queryResult.biz_content?.trade_status || queryResult.trade_status;
+      const isSuccess =
+        tradeStatus === 'Completed' ||
+        tradeStatus === 'SUCCESS' ||
+        tradeStatus === '2' ||
+        tradeStatus === 'TRADE_SUCCESS';
+
+      if (isSuccess && (order.payment.status as string) !== 'COMPLETED') {
+        // Update payment status
+        await this.prisma.$transaction(async (tx) => {
+          await tx.payment.update({
+            where: { id: order.payment!.id },
+            data: {
+              status: 'COMPLETED',
+              providerData: queryResult as any,
+            },
+          });
+
+          await tx.order.update({
+            where: { id: order.id },
+            data: {
+              status: 'PAID',
+              paymentMethod: 'TELEBIRR',
+              paymentRef: queryResult.biz_content?.transaction_no || order.payment!.providerRef,
+            },
+          });
+
+          // Deduct stock for shop orders
+          const fullOrder = await tx.order.findUnique({
+            where: { id: order.id },
+            include: { items: true },
+          });
+
+          if (fullOrder && fullOrder.items.length > 0) {
+            for (const item of fullOrder.items) {
+              await tx.shopItem.update({
+                where: { id: item.shopItemId },
+                data: {
+                  stockQuantity: { decrement: item.quantity },
+                },
+              });
+            }
+          }
+        });
+
+        return {
+          verified: true,
+          status: 'COMPLETED',
+          order: {
+            id: order.id,
+            status: 'PAID',
+          },
+        };
+      }
     }
 
     return {
@@ -436,7 +341,9 @@ export class PaymentsService {
     };
   }
 
-  // Get payment status
+  /**
+   * Get payment status
+   */
   async getPaymentStatus(userId: string, orderId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -465,13 +372,15 @@ export class PaymentsService {
     };
   }
 
-  // Complete test payment (only works when Chapa is in test mode)
+  /**
+   * Complete test payment (for development/testing only)
+   */
   async completeTestPayment(userId: string, paymentId: string) {
-    const chapaKey = this.configService.get<string>('CHAPA_SECRET_KEY') || '';
+    const nodeEnv = this.configService.get<string>('NODE_ENV');
 
-    // Only allow in test mode
-    if (chapaKey && !chapaKey.includes('TEST')) {
-      throw new BadRequestException('Test payments only allowed in test mode');
+    // Only allow in development mode
+    if (nodeEnv !== 'development') {
+      throw new BadRequestException('Test payments only allowed in development mode');
     }
 
     const payment = await this.prisma.payment.findUnique({
@@ -491,7 +400,7 @@ export class PaymentsService {
       return { success: true, message: 'Payment already completed', order: payment.order };
     }
 
-    // Mark payment and order as completed, deduct stock for shop orders
+    // Mark payment and order as completed
     await this.prisma.$transaction(async (tx) => {
       await tx.payment.update({
         where: { id: payment.id },
@@ -505,7 +414,7 @@ export class PaymentsService {
         where: { id: payment.orderId },
         data: {
           status: 'PAID',
-          paymentMethod: 'CHAPA',
+          paymentMethod: 'TELEBIRR',
           paymentRef: `TEST-${Date.now()}`,
         },
       });

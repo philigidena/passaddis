@@ -35,7 +35,7 @@ import { paymentsApi, PaymentInitiation } from '../../services/api';
 const PASSADDIS_GREEN = '#00A86B';
 const PASSADDIS_DARK = '#1A1A2E';
 
-export type PaymentMethod = 'CHAPA' | 'TELEBIRR' | 'CBE_BIRR';
+export type PaymentMethod = 'TELEBIRR' | 'CBE_BIRR';
 
 export interface PaymentResult {
   orderId: string;
@@ -78,20 +78,12 @@ export interface PassAddisPayProps {
 
 const PAYMENT_METHODS = [
   {
-    id: 'CHAPA' as PaymentMethod,
-    name: 'Telebirr / CBE / Cards',
-    description: 'Pay with mobile money or cards',
-    icon: 'wallet-outline',
+    id: 'TELEBIRR' as PaymentMethod,
+    name: 'Telebirr',
+    description: 'Pay with your Telebirr wallet',
+    icon: 'phone-portrait-outline',
     recommended: true,
   },
-  // Future methods when direct integration is available
-  // {
-  //   id: 'TELEBIRR' as PaymentMethod,
-  //   name: 'Telebirr',
-  //   description: 'Pay with Telebirr',
-  //   icon: 'phone-portrait-outline',
-  //   recommended: false,
-  // },
 ];
 
 export function PassAddisPay({
@@ -114,7 +106,7 @@ export function PassAddisPay({
   const isDark = colorScheme === 'dark';
 
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('CHAPA');
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('TELEBIRR');
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'redirecting' | 'verifying'>('idle');
 

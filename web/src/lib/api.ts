@@ -301,7 +301,7 @@ export const ticketsApi = {
 
 // ============== PAYMENTS API ==============
 export const paymentsApi = {
-  initiate: (orderId: string, method: PaymentMethod = 'CHAPA') =>
+  initiate: (orderId: string, method: PaymentMethod = 'TELEBIRR') =>
     handleResponse<PaymentInitiation>(api.post('/payments/initiate', { orderId, method })),
 
   getStatus: (orderId: string) =>
