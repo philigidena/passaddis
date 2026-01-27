@@ -365,10 +365,23 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* Featured Events - Modern Design */}
-      <section className="py-32 bg-dark-bg relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:48px_48px]" />
+      {/* Featured Events - Modern Design with Parallax */}
+      <section className="py-32 relative overflow-hidden">
+        {/* Parallax Background */}
+        <div className="absolute inset-0">
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-fixed opacity-20"
+            style={{ backgroundImage: 'url(/hero/concert.jpeg)' }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-dark-bg via-dark-bg/95 to-dark-bg" />
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5" />
+        </div>
+
+        {/* Floating Elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-40 right-20 w-64 h-64 bg-primary/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-40 left-20 w-64 h-64 bg-accent/10 rounded-full blur-3xl" />
+        </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           {/* Section Header */}
@@ -384,7 +397,7 @@ export function HomePage() {
               </h2>
             </div>
             <Link to="/events" className="group">
-              <span className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white font-medium transition-all duration-300 hover:bg-white/10 hover:border-white/20">
+              <span className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white font-medium transition-all duration-300 hover:bg-white/10 hover:border-white/20 backdrop-blur-sm">
                 View All Events
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </span>
@@ -420,8 +433,8 @@ export function HomePage() {
               <p className="text-white/30 text-sm mt-2">Check back soon for upcoming events</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-              {events.slice(0, 6).map((event) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {events.slice(0, 8).map((event) => (
                 <EventCard key={event.id} event={event} />
               ))}
             </div>

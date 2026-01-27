@@ -163,6 +163,121 @@ async function main() {
           },
         },
       }),
+      prisma.event.create({
+        data: {
+          title: 'Ethiopian Premier League - Derby Day',
+          description: 'Watch the biggest football rivalry in Ethiopia! St. George FC vs Ethiopia Coffee FC at the historic Addis Ababa Stadium.',
+          venue: 'Addis Ababa Stadium',
+          address: 'Stadium Area',
+          city: 'Addis Ababa',
+          date: new Date('2026-02-08T15:00:00'),
+          endDate: new Date('2026-02-08T17:30:00'),
+          category: 'SPORTS',
+          status: 'PUBLISHED',
+          isFeatured: true,
+          imageUrl: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&h=600&fit=crop',
+          organizerId: organizer.id,
+          ticketTypes: {
+            create: [
+              { name: 'Popolare', description: 'Standing area behind goals', price: 50, quantity: 5000, maxPerOrder: 10 },
+              { name: 'Tribuna', description: 'Seated side sections', price: 150, quantity: 3000, maxPerOrder: 8 },
+              { name: 'VIP Box', description: 'Premium covered seating', price: 500, quantity: 200, maxPerOrder: 4 },
+            ],
+          },
+        },
+      }),
+      prisma.event.create({
+        data: {
+          title: 'Addis Fashion Week 2026',
+          description: 'Witness the best of Ethiopian fashion with designs from top local and international designers. A celebration of culture and style.',
+          venue: 'Sheraton Addis',
+          address: 'Taitu Street',
+          city: 'Addis Ababa',
+          date: new Date('2026-03-15T18:00:00'),
+          endDate: new Date('2026-03-17T22:00:00'),
+          category: 'FESTIVAL',
+          status: 'PUBLISHED',
+          isFeatured: true,
+          imageUrl: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&h=600&fit=crop',
+          organizerId: organizer.id,
+          ticketTypes: {
+            create: [
+              { name: 'Day Pass', description: 'Single day access', price: 800, quantity: 500, maxPerOrder: 4 },
+              { name: 'Full Pass', description: 'All 3 days access', price: 2000, quantity: 200, maxPerOrder: 2 },
+              { name: 'VIP Experience', description: 'Front row + backstage access', price: 5000, quantity: 50, maxPerOrder: 2 },
+            ],
+          },
+        },
+      }),
+      prisma.event.create({
+        data: {
+          title: 'Aster Aweke Farewell Tour',
+          description: 'The Queen of Ethiopian music performs her greatest hits one last time. An emotional evening celebrating decades of musical excellence.',
+          venue: 'Hyatt Regency',
+          address: 'Meskel Square Area',
+          city: 'Addis Ababa',
+          date: new Date('2026-04-25T19:00:00'),
+          endDate: new Date('2026-04-25T23:00:00'),
+          category: 'MUSIC',
+          status: 'PUBLISHED',
+          isFeatured: true,
+          imageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800&h=600&fit=crop',
+          organizerId: organizer.id,
+          ticketTypes: {
+            create: [
+              { name: 'Standard', description: 'General seating', price: 1000, quantity: 800, maxPerOrder: 6 },
+              { name: 'Gold', description: 'Premium seating + drink', price: 2500, quantity: 200, maxPerOrder: 4 },
+              { name: 'Diamond', description: 'Table seating + dinner', price: 5000, quantity: 50, maxPerOrder: 2 },
+            ],
+          },
+        },
+      }),
+      prisma.event.create({
+        data: {
+          title: 'Ethiopian Coffee Festival',
+          description: 'Celebrate Ethiopia\'s gift to the world! Coffee tastings, barista competitions, and cultural performances.',
+          venue: 'Unity Park',
+          address: 'National Palace',
+          city: 'Addis Ababa',
+          date: new Date('2026-03-01T09:00:00'),
+          endDate: new Date('2026-03-01T18:00:00'),
+          category: 'FESTIVAL',
+          status: 'PUBLISHED',
+          isFeatured: true,
+          imageUrl: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=800&h=600&fit=crop',
+          organizerId: organizer.id,
+          ticketTypes: {
+            create: [
+              { name: 'General Entry', description: 'Festival access', price: 200, quantity: 2000, maxPerOrder: 10 },
+              { name: 'Coffee Lover Pass', description: 'Includes tasting kit', price: 500, quantity: 500, maxPerOrder: 4 },
+              { name: 'Connoisseur Package', description: 'All tastings + merchandise', price: 1200, quantity: 100, maxPerOrder: 2 },
+            ],
+          },
+        },
+      }),
+      prisma.event.create({
+        data: {
+          title: 'Addis Run 2026 - 10K Marathon',
+          description: 'Join thousands of runners in the annual Addis Run! Experience the beauty of Addis while promoting health and fitness.',
+          venue: 'Meskel Square to Entoto',
+          address: 'Meskel Square',
+          city: 'Addis Ababa',
+          date: new Date('2026-05-10T06:00:00'),
+          endDate: new Date('2026-05-10T12:00:00'),
+          category: 'SPORTS',
+          status: 'PUBLISHED',
+          isFeatured: false,
+          imageUrl: 'https://images.unsplash.com/photo-1513593771513-7b58b6c4af38?w=800&h=600&fit=crop',
+          organizerId: organizer.id,
+          ticketTypes: {
+            create: [
+              { name: '5K Fun Run', description: 'Family-friendly distance', price: 150, quantity: 3000, maxPerOrder: 5 },
+              { name: '10K Race', description: 'Competitive 10K', price: 300, quantity: 2000, maxPerOrder: 3 },
+              { name: 'Half Marathon', description: '21K challenge', price: 500, quantity: 500, maxPerOrder: 2 },
+            ],
+          },
+        },
+      }),
     ]);
     console.log(`✅ Created ${events.length} events`);
   }
