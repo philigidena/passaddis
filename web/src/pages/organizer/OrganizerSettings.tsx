@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { organizerApi, authApi } from '@/lib/api';
+import { organizerApi, authApi, setAuthToken } from '@/lib/api';
 import {
   DashboardLayout,
   DashboardButton,
@@ -51,7 +51,7 @@ interface ProfileFormData {
 }
 
 export function OrganizerSettings() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<MerchantProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -148,10 +148,42 @@ export function OrganizerSettings() {
       }
 
       if (response.data) {
-        setProfile(response.data);
+        // If creating new profile, backend returns accessToken and user data
+        if (isCreating && 'accessToken' in response.data) {
+          const { accessToken, user: userData, ...profileData } = response.data as any;
+
+          // Store new JWT token with updated role
+          if (accessToken) {
+            localStorage.setItem('passaddis_token', accessToken);
+            setAuthToken(accessToken);
+          }
+
+          // Update user in local storage
+          if (userData) {
+            localStorage.setItem('passaddis_user', JSON.stringify(userData));
+          }
+
+          // Set profile data (without accessToken and user fields)
+          setProfile(profileData);
+
+          // Refresh user context with new role
+          if (refreshUser) {
+            try {
+              await refreshUser();
+            } catch (refreshError) {
+              console.error('Failed to refresh user context:', refreshError);
+            }
+          }
+
+          setSuccessMessage('Profile created successfully! Your application is pending admin approval.');
+        } else {
+          // Update profile (no token change)
+          setProfile(response.data);
+          setSuccessMessage('Settings saved successfully!');
+        }
+
         setIsCreating(false);
-        setSuccessMessage(isCreating ? 'Profile created successfully!' : 'Settings saved successfully!');
-        setTimeout(() => setSuccessMessage(''), 3000);
+        setTimeout(() => setSuccessMessage(''), 5000);
       } else {
         setError(response.error || 'Failed to save settings');
       }

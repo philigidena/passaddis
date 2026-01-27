@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AfroSmsProvider } from './providers/afro-sms.provider';
+import { EmailProvider } from './providers/email.provider';
 import {
   SendOtpDto,
   VerifyOtpDto,
@@ -27,6 +28,7 @@ const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
 const REFRESH_TOKEN_EXPIRY_DAYS = 30;
 const ACCESS_TOKEN_EXPIRY = '15m'; // Short-lived access tokens
+const EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
 const PASSWORD_RESET_EXPIRY_HOURS = 1;
 
 @Injectable()
@@ -35,6 +37,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private smsProvider: AfroSmsProvider,
+    private emailProvider: EmailProvider,
     private configService: ConfigService,
   ) {}
 
@@ -374,23 +377,37 @@ export class AuthService {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Generate email verification token
+    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+    const emailVerificationExpiresAt = new Date(
+      Date.now() + EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60 * 1000,
+    );
+
+    // Create user with unverified email
     const user = await this.prisma.user.create({
       data: {
         email,
         passwordHash,
         name,
         phone: phone || `email_${Date.now()}`,
-        isVerified: true,
+        isVerified: false, // User needs to verify email first
+        emailVerified: false,
+        emailVerificationToken,
+        emailVerificationExpiresAt,
       },
     });
 
-    // Generate tokens
+    // Generate tokens (user can login but with limited access until verified)
     const { accessToken, refreshToken } = await this.generateTokens(
       user,
       deviceInfo,
       ipAddress,
     );
+
+    // Send verification email
+    this.emailProvider.sendVerificationEmail(email, name, emailVerificationToken).catch((error) => {
+      console.error(`Failed to send verification email to ${email}:`, error);
+    });
 
     // Log registration
     await this.logAudit(
@@ -633,14 +650,18 @@ export class AuthService {
       },
     });
 
-    // Log for development (in production, send email)
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
-    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+    // Send password reset email
+    const emailResult = await this.emailProvider.sendPasswordResetEmail(
+      email,
+      user.name,
+      resetToken,
+    );
 
-    console.log(`🔑 Password reset link for ${email}: ${resetUrl}`);
+    if (!emailResult.success) {
+      console.error(`Failed to send password reset email to ${email}:`, emailResult.error);
+    }
 
-    // TODO: Send actual email in production
-    // For now, if user has phone, send SMS with code
+    // Also send SMS if user has phone (as backup)
     if (user.phone && !user.phone.startsWith('email_')) {
       const shortCode = resetToken.substring(0, 8).toUpperCase();
       await this.smsProvider.sendSms(
@@ -706,5 +727,93 @@ export class AuthService {
     );
 
     return { message: 'Password has been reset successfully. Please login with your new password.' };
+  }
+
+  // Verify email with token
+  async verifyEmail(token: string): Promise<{ message: string; success: boolean }> {
+    if (!token) {
+      throw new BadRequestException('Verification token is required');
+    }
+
+    // Find user with valid verification token
+    const user = await this.prisma.user.findFirst({
+      where: {
+        emailVerificationToken: token,
+        emailVerificationExpiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
+
+    // Mark email as verified
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        isVerified: true,
+        emailVerified: true,
+        emailVerificationToken: null,
+        emailVerificationExpiresAt: null,
+      },
+    });
+
+    // Send welcome email now that they're verified
+    if (user.email && user.name) {
+      this.emailProvider.sendWelcomeEmail(user.email, user.name).catch((error) => {
+        console.error(`Failed to send welcome email to ${user.email}:`, error);
+      });
+    }
+
+    // Log audit event
+    await this.logAudit(
+      'EMAIL_VERIFIED',
+      'User',
+      user.id,
+      user.id,
+    );
+
+    return {
+      message: 'Email verified successfully! You can now access all features.',
+      success: true,
+    };
+  }
+
+  // Resend verification email
+  async resendVerificationEmail(email: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      // Don't reveal if email exists
+      return { message: 'If an account exists with this email, you will receive a verification link.' };
+    }
+
+    if (user.emailVerified) {
+      throw new BadRequestException('Email is already verified');
+    }
+
+    // Generate new verification token
+    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+    const emailVerificationExpiresAt = new Date(
+      Date.now() + EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60 * 1000,
+    );
+
+    // Update user with new token
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerificationToken,
+        emailVerificationExpiresAt,
+      },
+    });
+
+    // Send verification email
+    this.emailProvider.sendVerificationEmail(email, user.name || 'User', emailVerificationToken).catch((error) => {
+      console.error(`Failed to send verification email to ${email}:`, error);
+    });
+
+    return { message: 'If an account exists with this email, you will receive a verification link.' };
   }
 }

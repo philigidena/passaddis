@@ -31,25 +31,34 @@ export class PaymentCallbackDto {
 
 /**
  * Telebirr callback/notification DTO
- * Telebirr may send fields in different formats (camelCase or snake_case)
+ * Based on Telebirr C2B WebCheckout documentation (Step 7 - Notify)
+ *
+ * The callback includes a signature that must be verified using Telebirr's public key.
  */
 export class TelebirrCallbackDto {
-  // camelCase format
+  // Fields from Telebirr callback notification (Step 7 in docs)
+  notify_url?: string;           // Callback address
+  appid?: string;                // Application ID
+  notify_time?: string;          // Notification timestamp (long, UTC seconds)
+  merch_code?: string;           // Merchant short code
+  merch_order_id?: string;       // Order ID on merchant side (our reference)
+  payment_order_id?: string;     // Order ID on Telebirr side
+  total_amount?: string;         // Payment amount
+  trans_id?: string;             // Transaction ID
+  trans_currency?: string;       // Currency (ETB)
+  trade_status?: string;         // Payment status: Completed, Pending, Paying, Expired, Failure
+  trans_end_time?: string;       // Transaction end time (timestamp)
+  callback_info?: string;        // Custom callback info passed during order creation
+  sign?: string;                 // Response signature (SHA256WithRSA)
+  sign_type?: string;            // Signature type (SHA256WithRSA)
+
+  // Alternative camelCase format (for backward compatibility)
   outTradeNo?: string;
   transactionNo?: string;
   totalAmount?: string;
   tradeStatus?: string;
   msisdn?: string;
-
-  // snake_case format (alternative)
-  merch_order_id?: string;
   transaction_no?: string;
-  total_amount?: string;
-  trade_status?: string;
-
-  // Common fields
-  callback_info?: string;
-  sign?: string;
   timestamp?: string;
 }
 

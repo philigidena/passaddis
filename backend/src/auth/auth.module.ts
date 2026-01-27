@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { AfroSmsProvider } from './providers/afro-sms.provider';
+import { EmailProvider } from './providers/email.provider';
 
 @Module({
   imports: [
@@ -23,7 +24,7 @@ import { AfroSmsProvider } from './providers/afro-sms.provider';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, AfroSmsProvider],
-  exports: [AuthService, JwtStrategy, AfroSmsProvider],
+  providers: [AuthService, JwtStrategy, AfroSmsProvider, EmailProvider],
+  exports: [AuthService, JwtStrategy, AfroSmsProvider, EmailProvider],
 })
 export class AuthModule {}

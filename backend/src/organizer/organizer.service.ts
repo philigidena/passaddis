@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AfroSmsProvider } from '../auth/providers/afro-sms.provider';
 import {
@@ -19,6 +20,7 @@ export class OrganizerService {
   constructor(
     private prisma: PrismaService,
     private smsProvider: AfroSmsProvider,
+    private jwtService: JwtService,
   ) {}
 
   // ==================== PROFILE MANAGEMENT ====================
@@ -102,12 +104,32 @@ export class OrganizerService {
     });
 
     // Update user role to ORGANIZER
-    await this.prisma.user.update({
+    const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: { role: 'ORGANIZER' },
     });
 
-    return merchant;
+    // Generate new JWT token with updated role
+    const payload = {
+      sub: updatedUser.id,
+      phone: updatedUser.phone,
+      email: updatedUser.email,
+      role: updatedUser.role,
+    };
+    const accessToken = this.jwtService.sign(payload);
+
+    // Return merchant profile with new access token
+    return {
+      ...merchant,
+      accessToken,
+      user: {
+        id: updatedUser.id,
+        phone: updatedUser.phone,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+      },
+    };
   }
 
   async updateProfile(userId: string, dto: UpdateOrganizerProfileDto) {
@@ -685,6 +707,13 @@ export class OrganizerService {
           },
         });
 
+        // Get current wallet balance for merchant
+        const currentBalance = await tx.walletTransaction.aggregate({
+          where: { merchantId: merchant.id },
+          _sum: { netAmount: true },
+        });
+        let runningBalance = currentBalance._sum.netAmount || 0;
+
         // Initiate refunds for all paid orders
         const refundPromises = Array.from(ordersToRefund.values()).map(async (order) => {
           await tx.order.update({
@@ -699,6 +728,11 @@ export class OrganizerService {
             },
           });
 
+          // Calculate balance before and after for this refund
+          const balanceBefore = runningBalance;
+          const balanceAfter = runningBalance - order.total;
+          runningBalance = balanceAfter;
+
           // Create a wallet transaction deducting from merchant
           await tx.walletTransaction.create({
             data: {
@@ -706,8 +740,8 @@ export class OrganizerService {
               orderId: order.id,
               amount: order.total,
               netAmount: -order.total, // Deduct full amount
-              balanceBefore: 0,  // Will be calculated by finance team
-              balanceAfter: 0,   // Will be calculated by finance team
+              balanceBefore,
+              balanceAfter,
               type: 'REFUND',
               status: 'PENDING',
               description: `Refund for cancelled event: ${event.title}`,

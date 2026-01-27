@@ -923,6 +923,9 @@ export class ShopOwnerService {
   // ==================== ORDER CANCELLATION ====================
 
   async cancelOrder(userId: string, orderId: string, reason: string) {
+    // Verify shop owner is active and get their merchant profile
+    const merchant = await this.getVerifiedMerchant(userId, true);
+
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -935,8 +938,9 @@ export class ShopOwnerService {
       throw new NotFoundException('Order not found');
     }
 
-    if (order.userId !== userId) {
-      throw new ForbiddenException('You do not own this order');
+    // SECURITY FIX: Verify the shop owner owns this order (check merchantId, not userId)
+    if (order.merchantId !== merchant.id) {
+      throw new ForbiddenException('You do not have permission to cancel this order');
     }
 
     // Can only cancel pending or paid orders (not picked up or completed)
@@ -949,7 +953,7 @@ export class ShopOwnerService {
     const updateData: any = {
       status: 'CANCELLED',
       cancelledAt: new Date(),
-      cancelledBy: 'user',
+      cancelledBy: 'shop_owner',
       cancellationReason: reason,
     };
 

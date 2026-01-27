@@ -227,7 +227,13 @@ export class ShopOwnerController {
 
   // ==================== ORDER CANCELLATION ====================
 
+  /**
+   * Cancel an order
+   * Only SHOP_OWNER and ADMIN roles can cancel orders
+   */
   @Post('orders/:id/cancel')
+  @UseGuards(RolesGuard)
+  @Roles('SHOP_OWNER', 'ADMIN')
   async cancelOrder(
     @CurrentUser('id') userId: string,
     @Param('id') orderId: string,

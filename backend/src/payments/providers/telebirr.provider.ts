@@ -22,18 +22,31 @@ export interface TelebirrPaymentResponse {
 }
 
 export interface TelebirrCallbackData {
+  // Fields from Telebirr callback notification (Step 7 in docs)
+  notify_url?: string;
+  appid?: string;
+  notify_time?: string;
+  merch_code?: string;
+  merch_order_id?: string;
+  payment_order_id?: string;
+  total_amount?: string;
+  trans_id?: string;
+  trans_currency?: string;
+  trade_status?: string;
+  trans_end_time?: string;
+  callback_info?: string;
+  sign?: string;
+  sign_type?: string;
+
+  // Alternative camelCase format (legacy/alternative)
   outTradeNo?: string;
   transactionNo?: string;
   totalAmount?: string;
   tradeStatus?: string;
   msisdn?: string;
   tradeNo?: string;
-  merch_order_id?: string;
-  trade_status?: string;
-  total_amount?: string;
   transaction_no?: string;
   timestamp?: string;
-  sign?: string;
 }
 
 export interface TelebirrRefundRequest {
@@ -69,6 +82,7 @@ export class TelebirrProvider {
   private readonly appSecret: string;
   private readonly shortCode: string;
   private readonly privateKey: string;
+  private readonly publicKey: string; // Telebirr's public key for verifying callbacks
   private readonly baseUrl: string;
   private readonly webBaseUrl: string;
 
@@ -78,17 +92,24 @@ export class TelebirrProvider {
     this.appSecret = this.configService.get<string>('TELEBIRR_APP_SECRET') || '';
     this.shortCode = this.configService.get<string>('TELEBIRR_SHORT_CODE') || '';
     this.privateKey = this.configService.get<string>('TELEBIRR_PRIVATE_KEY') || '';
+    // Telebirr's public key for verifying callback signatures
+    this.publicKey = this.configService.get<string>('TELEBIRR_PUBLIC_KEY') || '';
 
-    // API Base URL
-    const apiUrl = this.configService.get<string>('TELEBIRR_API_URL') ||
+    // API Base URL - Use environment variable or default to testbed
+    // Testbed API: https://developerportal.ethiotelebirr.et:38443/apiaccess/payment/gateway
+    // Production API: https://telebirrappcube.ethiomobilemoney.et:38443/apiaccess/payment/gateway
+    // NOTE: Do NOT strip /payment/gateway - endpoints are appended to this base
+    this.baseUrl = this.configService.get<string>('TELEBIRR_API_URL') ||
       'https://developerportal.ethiotelebirr.et:38443/apiaccess/payment/gateway';
-    this.baseUrl = apiUrl.replace('/payment/gateway', '');
 
     // Web Checkout Base URL (for redirect)
     // Testbed: https://developerportal.ethiotelebirr.et:38443/payment/web/paygate?
     // Production: https://telebirrappcube.ethiomobilemoney.et:38443/payment/web/paygate?
     this.webBaseUrl = this.configService.get<string>('TELEBIRR_WEB_CHECKOUT_URL') ||
       'https://developerportal.ethiotelebirr.et:38443/payment/web/paygate?';
+
+    console.log('📱 Telebirr configured with API base:', this.baseUrl);
+    console.log('📱 Telebirr web checkout base:', this.webBaseUrl);
   }
 
   /**
@@ -116,18 +137,18 @@ export class TelebirrProvider {
   }
 
   /**
-   * Sign request object with private key using SHA256WithRSA
+   * Sign request object with private key using SHA256WithRSA (RSA-PSS)
    *
    * According to Telebirr docs:
-   * 1. Exclude sign and sign_type fields
+   * 1. Exclude sign, sign_type, biz_content (as object) fields
    * 2. Flatten biz_content fields into the main map
    * 3. Sort all fields alphabetically (A-Z)
    * 4. Join as key=value pairs with &
-   * 5. Sign with SHA256WithRSA (RSA-SHA256)
+   * 5. Sign with SHA256withRSAandMGF1 (RSA-PSS with SHA256)
    */
   private signRequestObject(requestObj: any): string {
     try {
-      const excludeFields = ['sign', 'sign_type', 'header', 'refund_info', 'openType', 'raw_request', 'biz_content'];
+      const excludeFields = ['sign', 'sign_type', 'header', 'refund_info', 'openType', 'raw_request', 'biz_content', 'wallet_reference_data'];
       const fieldMap: Record<string, string> = {};
 
       // Add top-level fields (excluding biz_content)
@@ -156,11 +177,15 @@ export class TelebirrProvider {
         formattedKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----`;
       }
 
-      // Sign with RSA-SHA256
+      // Sign with RSA-PSS (SHA256withRSAandMGF1) as per Telebirr docs
       const sign = crypto.createSign('RSA-SHA256');
       sign.update(stringToSign);
       sign.end();
-      return sign.sign(formattedKey, 'base64');
+      return sign.sign({
+        key: formattedKey,
+        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+      }, 'base64');
     } catch (error) {
       console.error('❌ Signing error:', error);
       throw error;
@@ -168,7 +193,7 @@ export class TelebirrProvider {
   }
 
   /**
-   * Make HTTPS request with SSL certificate handling
+   * Make HTTPS request with SSL certificate handling and timeout
    */
   private async makeRequest(url: string, options: any, body: any): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -180,7 +205,10 @@ export class TelebirrProvider {
         method: options.method || 'POST',
         headers: options.headers,
         rejectUnauthorized: false, // Required for Telebirr's certificate
+        timeout: 30000, // 30 second timeout
       };
+
+      console.log(`📱 Making request to: ${url}`);
 
       const req = https.request(reqOptions, (res) => {
         let data = '';
@@ -196,9 +224,24 @@ export class TelebirrProvider {
         });
       });
 
-      req.on('error', (error) => {
-        console.error('❌ Request error:', error);
-        reject(error);
+      // Handle timeout
+      req.on('timeout', () => {
+        req.destroy();
+        console.error('❌ Request timeout after 30s');
+        reject(new Error('Connection to Telebirr API timed out. The API may be unreachable from this server location.'));
+      });
+
+      req.on('error', (error: any) => {
+        console.error('❌ Request error:', error.message);
+        if (error.code === 'ECONNREFUSED') {
+          reject(new Error('Connection refused by Telebirr API. Please check network/firewall settings.'));
+        } else if (error.code === 'ENOTFOUND') {
+          reject(new Error('Could not resolve Telebirr API hostname.'));
+        } else if (error.code === 'ETIMEDOUT' || error.code === 'ESOCKETTIMEDOUT') {
+          reject(new Error('Connection to Telebirr API timed out. The API may be unreachable from this server.'));
+        } else {
+          reject(error);
+        }
       });
 
       if (body) {
@@ -211,10 +254,12 @@ export class TelebirrProvider {
   /**
    * Step 1: Apply for Fabric Token
    */
-  private async applyFabricToken(): Promise<string | null> {
+  private async applyFabricToken(): Promise<{ token: string } | { error: string }> {
     try {
       const url = `${this.baseUrl}/payment/v1/token`;
       console.log('📱 Applying for Fabric Token at:', url);
+      console.log('📱 Using X-APP-Key:', this.fabricAppId);
+      console.log('📱 Using appSecret:', this.appSecret ? `${this.appSecret.substring(0, 8)}...` : 'NOT SET');
 
       const result = await this.makeRequest(url, {
         method: 'POST',
@@ -229,14 +274,16 @@ export class TelebirrProvider {
       console.log('📱 Fabric Token Response:', JSON.stringify(result, null, 2));
 
       if (result.token) {
-        return result.token;
+        return { token: result.token };
       }
 
-      console.error('❌ Failed to get fabric token:', result);
-      return null;
+      // Return actual error from Telebirr
+      const errorMsg = result.errorMsg || result.msg || result.message || JSON.stringify(result);
+      console.error('❌ Failed to get fabric token:', errorMsg);
+      return { error: `Telebirr token error: ${errorMsg}` };
     } catch (error) {
       console.error('❌ Fabric token error:', error);
-      return null;
+      return { error: error instanceof Error ? error.message : 'Connection failed' };
     }
   }
 
@@ -372,13 +419,14 @@ export class TelebirrProvider {
     try {
       // Step 1: Get Fabric Token
       console.log('📱 Step 1: Getting Fabric Token...');
-      const fabricToken = await this.applyFabricToken();
-      if (!fabricToken) {
+      const tokenResult = await this.applyFabricToken();
+      if ('error' in tokenResult) {
         return {
           success: false,
-          error: 'Failed to authenticate with Telebirr',
+          error: tokenResult.error,
         };
       }
+      const fabricToken = tokenResult.token;
 
       // Step 2: Create PreOrder
       console.log('📱 Step 2: Creating PreOrder...');
@@ -423,19 +471,78 @@ export class TelebirrProvider {
   }
 
   /**
-   * Verify a Telebirr callback/notification
+   * Verify a Telebirr callback/notification signature
+   *
+   * According to Telebirr docs (Step 7 - Notify):
+   * 1. Exclude sign and sign_type from callback fields
+   * 2. Sort remaining fields alphabetically
+   * 3. Join as key=value pairs with &
+   * 4. Verify signature using Telebirr's public key with SHA256WithRSA
    */
   async verifyCallback(data: TelebirrCallbackData): Promise<boolean> {
     console.log('📱 Telebirr Callback Data:', JSON.stringify(data, null, 2));
 
+    // If no signature provided, reject the callback (security)
     if (!data.sign) {
-      console.warn('⚠️ No signature in callback, accepting data');
+      console.error('❌ No signature in callback - rejecting for security');
+      return false;
+    }
+
+    // If no public key configured, log warning but allow (for backward compatibility during setup)
+    if (!this.publicKey) {
+      console.warn('⚠️ TELEBIRR_PUBLIC_KEY not configured - signature verification skipped');
+      console.warn('⚠️ This is a SECURITY RISK - please configure TELEBIRR_PUBLIC_KEY');
       return true;
     }
 
     try {
-      // TODO: Verify signature with Telebirr's public key if available
-      return true;
+      // Fields to exclude from signature verification
+      const excludeFields = ['sign', 'sign_type'];
+      const fieldMap: Record<string, string> = {};
+
+      // Build field map excluding sign fields
+      for (const key of Object.keys(data)) {
+        if (excludeFields.includes(key)) continue;
+        const value = (data as any)[key];
+        if (value !== undefined && value !== null && value !== '') {
+          fieldMap[key] = String(value);
+        }
+      }
+
+      // Sort keys alphabetically and build signature string
+      const sortedKeys = Object.keys(fieldMap).sort();
+      const stringToVerify = sortedKeys.map(key => `${key}=${fieldMap[key]}`).join('&');
+
+      console.log('📱 String to verify:', stringToVerify);
+
+      // Format public key
+      let formattedKey = this.publicKey;
+      if (!formattedKey.includes('-----BEGIN')) {
+        formattedKey = `-----BEGIN PUBLIC KEY-----\n${formattedKey}\n-----END PUBLIC KEY-----`;
+      }
+
+      // Verify signature using RSA-PSS (SHA256withRSAandMGF1)
+      const verify = crypto.createVerify('RSA-SHA256');
+      verify.update(stringToVerify);
+      verify.end();
+
+      const isValid = verify.verify(
+        {
+          key: formattedKey,
+          padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+        },
+        data.sign,
+        'base64'
+      );
+
+      if (isValid) {
+        console.log('✅ Telebirr callback signature verified successfully');
+      } else {
+        console.error('❌ Telebirr callback signature verification FAILED');
+      }
+
+      return isValid;
     } catch (error) {
       console.error('❌ Callback verification error:', error);
       return false;
@@ -453,10 +560,11 @@ export class TelebirrProvider {
     }
 
     try {
-      const fabricToken = await this.applyFabricToken();
-      if (!fabricToken) {
-        return { success: false, status: 'UNKNOWN', message: 'Auth failed' };
+      const tokenResult = await this.applyFabricToken();
+      if ('error' in tokenResult) {
+        return { success: false, status: 'UNKNOWN', message: tokenResult.error };
       }
+      const fabricToken = tokenResult.token;
 
       const req: any = {
         timestamp: this.createTimestamp(),
@@ -517,13 +625,14 @@ export class TelebirrProvider {
 
     try {
       // Step 1: Get Fabric Token
-      const fabricToken = await this.applyFabricToken();
-      if (!fabricToken) {
+      const tokenResult = await this.applyFabricToken();
+      if ('error' in tokenResult) {
         return {
           success: false,
-          error: 'Failed to authenticate with Telebirr',
+          error: tokenResult.error,
         };
       }
+      const fabricToken = tokenResult.token;
 
       // Step 2: Create Refund Request
       const req: any = {

@@ -5,8 +5,10 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AfroSmsProvider } from '../auth/providers/afro-sms.provider';
+import { EmailProvider } from '../auth/providers/email.provider';
 import { PurchaseTicketsDto, ValidateTicketDto } from './dto/tickets.dto';
 import {
   InitiateTransferDto,
@@ -27,11 +29,16 @@ const SCAN_COOLDOWN_MS = 5000;
 export class TicketsService {
   // In-memory cache for recent scans to prevent double-scanning
   private recentScans = new Map<string, number>();
+  private readonly frontendUrl: string;
 
   constructor(
     private prisma: PrismaService,
     private smsProvider: AfroSmsProvider,
+    private emailProvider: EmailProvider,
+    private configService: ConfigService,
   ) {
+    this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:8081';
+
     // Clean up old entries every minute
     setInterval(() => {
       const now = Date.now();
@@ -166,7 +173,12 @@ export class TicketsService {
   async createTicketsForPaidOrder(orderId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { tickets: true },
+      include: {
+        tickets: true,
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
     });
 
     if (!order) {
@@ -242,6 +254,22 @@ export class TicketsService {
     });
 
     console.log(`✅ Created ${createdTickets.length} tickets for paid order ${order.orderNumber}`);
+
+    // Send confirmation email if user has email
+    if (order.user?.email) {
+      const ticketUrl = `${this.frontendUrl}/tickets`;
+      this.emailProvider.sendTicketConfirmation(
+        order.user.email,
+        order.user.name,
+        event.title,
+        createdTickets.length,
+        order.total,
+        ticketUrl,
+      ).catch((error) => {
+        console.error(`Failed to send ticket confirmation email:`, error);
+      });
+    }
+
     return createdTickets;
   }
 
@@ -531,7 +559,20 @@ export class TicketsService {
       }
     }
 
-    // TODO: Send email notification if recipientEmail provided
+    // Send email notification if recipientEmail provided
+    if (dto.recipientEmail) {
+      const claimUrl = `${this.frontendUrl}/tickets/claim?code=${transferCode}`;
+      this.emailProvider.sendTicketTransferNotification(
+        dto.recipientEmail,
+        sender?.name || null,
+        ticket.event.title,
+        transferCode,
+        claimUrl,
+      ).catch((error) => {
+        console.error('Failed to send transfer email:', error);
+        // Don't fail the transfer if email fails
+      });
+    }
 
     return {
       transfer: {

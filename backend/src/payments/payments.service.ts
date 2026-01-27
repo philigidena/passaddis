@@ -22,6 +22,7 @@ type PaymentMethodString = 'TELEBIRR' | 'CBE_BIRR' | 'BANK_TRANSFER';
 export class PaymentsService {
   private readonly frontendUrl: string;
   private readonly apiUrl: string;
+  private readonly defaultCommissionRate: number;
 
   constructor(
     private prisma: PrismaService,
@@ -33,6 +34,100 @@ export class PaymentsService {
     this.frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:8081';
     this.apiUrl = this.configService.get<string>('API_URL') || `http://localhost:${this.configService.get<string>('PORT') || 3000}`;
+    this.defaultCommissionRate = this.configService.get<number>('PLATFORM_COMMISSION_RATE') || 5;
+  }
+
+  /**
+   * Create wallet transaction for merchant when payment succeeds
+   * This credits the merchant's wallet with the sale amount minus platform commission
+   */
+  private async createWalletTransaction(
+    orderId: string,
+    tx: any, // Prisma transaction client
+  ): Promise<void> {
+    // Get order with merchant info
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: {
+        merchant: true,
+        items: {
+          include: {
+            shopItem: {
+              include: { merchant: true },
+            },
+          },
+        },
+        tickets: {
+          include: {
+            event: {
+              include: { merchant: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) return;
+
+    // Determine the merchant - either direct or through items/tickets
+    let merchant = order.merchant;
+
+    // For shop orders, get merchant from items
+    if (!merchant && order.items.length > 0) {
+      merchant = order.items[0].shopItem?.merchant;
+    }
+
+    // For ticket orders, get merchant from event
+    if (!merchant && order.tickets.length > 0) {
+      merchant = order.tickets[0].event?.merchant;
+    }
+
+    if (!merchant) {
+      console.warn(`⚠️ No merchant found for order ${orderId} - skipping wallet transaction`);
+      return;
+    }
+
+    // Calculate commission
+    const commissionRate = merchant.commissionRate || this.defaultCommissionRate;
+    const grossAmount = order.subtotal;
+    const platformFee = Math.round(grossAmount * (commissionRate / 100) * 100) / 100;
+    const netAmount = grossAmount - platformFee;
+
+    // Get current wallet balance
+    const currentBalance = await tx.walletTransaction.aggregate({
+      where: { merchantId: merchant.id },
+      _sum: { netAmount: true },
+    });
+    const balanceBefore = currentBalance._sum.netAmount || 0;
+    const balanceAfter = balanceBefore + netAmount;
+
+    // Create wallet transaction
+    await tx.walletTransaction.create({
+      data: {
+        merchantId: merchant.id,
+        orderId: order.id,
+        type: 'CREDIT',
+        amount: grossAmount,
+        fee: platformFee,
+        netAmount: netAmount,
+        balanceBefore,
+        balanceAfter,
+        status: 'COMPLETED',
+        description: `Sale: Order ${order.orderNumber}`,
+        reference: order.id,
+      },
+    });
+
+    // Update order with merchant amount
+    await tx.order.update({
+      where: { id: orderId },
+      data: {
+        merchantAmount: netAmount,
+        platformFee: platformFee,
+      },
+    });
+
+    console.log(`💰 Wallet credited for merchant ${merchant.businessName}: ${netAmount} ETB (${commissionRate}% commission: ${platformFee} ETB)`);
   }
 
   /**
@@ -154,13 +249,18 @@ export class PaymentsService {
   /**
    * Handle Telebirr callback/webhook
    * Called by Telebirr after payment completion
+   *
+   * Security checks:
+   * 1. Verify callback signature using Telebirr's public key
+   * 2. Validate payment amount matches order total
+   * 3. Prevent duplicate processing
    */
   async handleTelebirrCallback(data: TelebirrCallbackDto) {
     console.log('📱 Processing Telebirr callback:', JSON.stringify(data, null, 2));
 
     // Normalize field names (Telebirr may use different formats)
     const outTradeNo = data.outTradeNo || data.merch_order_id;
-    const transactionNo = data.transactionNo || data.transaction_no;
+    const transactionNo = data.transactionNo || data.transaction_no || data.payment_order_id;
     const tradeStatus = data.tradeStatus || data.trade_status;
     const totalAmount = data.totalAmount || data.total_amount;
 
@@ -169,11 +269,11 @@ export class PaymentsService {
       return { success: false, message: 'Missing order reference' };
     }
 
-    // Verify callback signature
+    // Verify callback signature (critical security check)
     const verified = await this.telebirrProvider.verifyCallback(data as TelebirrCallbackData);
     if (!verified) {
-      console.error('❌ Telebirr callback verification failed');
-      return { success: false, message: 'Verification failed' };
+      console.error('❌ Telebirr callback signature verification failed - possible fraud attempt');
+      return { success: false, message: 'Signature verification failed' };
     }
 
     // Find payment by provider reference
@@ -187,9 +287,30 @@ export class PaymentsService {
       return { success: false, message: 'Payment not found' };
     }
 
-    // Check trade status - Telebirr uses "Completed", "2", or "SUCCESS"
+    // Prevent duplicate processing (idempotency check)
+    if (payment.status === 'COMPLETED') {
+      console.log('⚠️ Payment already completed, skipping duplicate callback:', outTradeNo);
+      return { success: true, message: 'Payment already processed' };
+    }
+
+    // Validate payment amount matches order total (prevent amount manipulation attacks)
+    if (totalAmount) {
+      const callbackAmount = parseFloat(totalAmount);
+      const expectedAmount = payment.amount;
+      // Allow small rounding differences (0.01 ETB tolerance)
+      if (Math.abs(callbackAmount - expectedAmount) > 0.01) {
+        console.error(`❌ Amount mismatch: callback=${callbackAmount}, expected=${expectedAmount}`);
+        console.error('❌ Possible fraud attempt - amount manipulation detected');
+        return { success: false, message: 'Amount validation failed' };
+      }
+    }
+
+    // Check trade status - Telebirr status values from documentation
+    // Step 7 (Notify): Completed, Pending, Paying, Expired, Failure
+    // Step 5 (Query): PAY_SUCCESS, PAY_FAILED, WAIT_PAY, ORDER_CLOSED, PAYING
     const isSuccess =
       tradeStatus === 'Completed' ||
+      tradeStatus === 'PAY_SUCCESS' ||
       tradeStatus === 'SUCCESS' ||
       tradeStatus === '2' ||
       tradeStatus === 'TRADE_SUCCESS';
@@ -233,6 +354,9 @@ export class PaymentsService {
           }
           console.log(`📦 Stock deducted for order ${order.id}`);
         }
+
+        // Create wallet transaction for merchant
+        await this.createWalletTransaction(payment.orderId, tx);
       }
     });
 
@@ -333,6 +457,9 @@ export class PaymentsService {
               });
             }
           }
+
+          // Create wallet transaction for merchant
+          await this.createWalletTransaction(order.id, tx);
         });
 
         // Create tickets for paid ticket orders
@@ -457,6 +584,9 @@ export class PaymentsService {
           });
         }
       }
+
+      // Create wallet transaction for merchant
+      await this.createWalletTransaction(payment.orderId, tx);
     });
 
     // Create tickets for paid ticket orders

@@ -8,6 +8,7 @@ import {
   Patch,
   Param,
   Req,
+  Query,
   BadRequestException,
   Headers,
 } from '@nestjs/common';
@@ -104,6 +105,21 @@ export class AuthController {
   @Throttle({ default: { ttl: 60000, limit: 5 } }) // 5 attempts per minute
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  // ============== EMAIL VERIFICATION ==============
+
+  @Public()
+  @Get('verify-email')
+  async verifyEmail(@Query('token') token: string) {
+    return this.authService.verifyEmail(token);
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @Throttle({ default: { ttl: 60000, limit: 3 } }) // 3 requests per minute
+  async resendVerification(@Body() body: { email: string }) {
+    return this.authService.resendVerificationEmail(body.email);
   }
 
   // ============== REFRESH TOKEN MANAGEMENT ==============

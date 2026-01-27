@@ -51,14 +51,40 @@ const navItems = [
 ];
 
 interface DashboardStats {
-  todayOrders: number;
-  todayRevenue: number;
-  pendingOrders: number;
-  readyForPickup: number;
-  completedToday: number;
-  totalOrders: number;
-  totalRevenue: number;
+  profile?: {
+    id: string;
+    businessName: string;
+    status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'BLOCKED';
+    isVerified: boolean;
+    commissionRate: number;
+  };
+  orders?: {
+    total: number;
+    pending: number;
+    ready: number;
+    completed: number;
+    cancelled: number;
+  };
+  revenue?: {
+    total: number;
+    thisMonth: number;
+    thisWeek: number;
+  };
+  wallet?: {
+    balance: number;
+    pendingSettlement: number;
+  };
+  // Legacy flat structure support
+  todayOrders?: number;
+  todayRevenue?: number;
+  pendingOrders?: number;
+  readyForPickup?: number;
+  completedToday?: number;
+  totalOrders?: number;
+  totalRevenue?: number;
 }
+
+type MerchantStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'BLOCKED' | null;
 
 export function ShopOwnerDashboard() {
   const { user, isLoading: authLoading } = useAuth();
@@ -67,6 +93,7 @@ export function ShopOwnerDashboard() {
   const [recentOrders, setRecentOrders] = useState<ShopOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [needsProfile, setNeedsProfile] = useState(false);
+  const [merchantStatus, setMerchantStatus] = useState<MerchantStatus>(null);
 
   useEffect(() => {
     if (!authLoading && !['SHOP_OWNER', 'ADMIN'].includes(user?.role || '')) {
@@ -96,11 +123,20 @@ export function ShopOwnerDashboard() {
       if (dashboardRes.data) {
         setStats(dashboardRes.data);
         setNeedsProfile(false);
+
+        // Check merchant status from profile
+        const status = dashboardRes.data.profile?.status;
+        if (status) {
+          setMerchantStatus(status);
+        } else {
+          setMerchantStatus('ACTIVE'); // Fallback for legacy data
+        }
       } else if (dashboardRes.error?.includes('not found')) {
         setNeedsProfile(true);
       }
 
-      if (ordersRes.data) {
+      // Only load orders if merchant is ACTIVE
+      if (ordersRes.data && !ordersRes.error) {
         setRecentOrders(ordersRes.data.slice(0, 5));
       }
     } catch (error) {
@@ -162,6 +198,74 @@ export function ShopOwnerDashboard() {
             size="lg"
           >
             Create Shop Profile
+          </DashboardButton>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Pending Approval View
+  if (merchantStatus === 'PENDING') {
+    return (
+      <DashboardLayout title="Shop Owner Portal" navItems={navItems} accentColor="orange">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+          <div className="w-20 h-20 rounded-full bg-yellow-500/20 flex items-center justify-center mb-6">
+            <svg className="w-10 h-10 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl lg:text-3xl font-bold text-white mb-3">
+            Application Pending Approval
+          </h1>
+          <p className="text-gray-400 max-w-md mb-4">
+            Thank you for applying to become a PassAddis shop partner! Your application is currently being reviewed by our team.
+          </p>
+          <p className="text-gray-500 text-sm max-w-md mb-8">
+            This usually takes 24-48 hours. You'll receive a notification once your account is activated.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <DashboardButton
+              onClick={() => navigate('/shop-owner/settings')}
+              variant="secondary"
+            >
+              View Profile
+            </DashboardButton>
+            <DashboardButton
+              onClick={() => navigate('/shop-owner/items')}
+              variant="primary"
+            >
+              Prepare Your Items
+            </DashboardButton>
+          </div>
+          <p className="text-gray-500 text-xs mt-6">
+            You can add items while waiting for approval. They'll be ready to sell once you're activated.
+          </p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Suspended/Blocked View
+  if (merchantStatus === 'SUSPENDED' || merchantStatus === 'BLOCKED') {
+    return (
+      <DashboardLayout title="Shop Owner Portal" navItems={navItems} accentColor="orange">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+          <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center mb-6">
+            <svg className="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl lg:text-3xl font-bold text-white mb-3">
+            Account {merchantStatus === 'SUSPENDED' ? 'Suspended' : 'Blocked'}
+          </h1>
+          <p className="text-gray-400 max-w-md mb-8">
+            Your shop partner account has been {merchantStatus.toLowerCase()}. Please contact our support team for assistance.
+          </p>
+          <DashboardButton
+            onClick={() => window.location.href = 'mailto:support@passaddis.com'}
+            variant="primary"
+          >
+            Contact Support
           </DashboardButton>
         </div>
       </DashboardLayout>

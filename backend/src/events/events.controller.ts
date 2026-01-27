@@ -15,7 +15,9 @@ import {
   EventQueryDto,
 } from './dto/events.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('events')
@@ -46,7 +48,12 @@ export class EventsController {
     return this.eventsService.findOne(id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  /**
+   * Create a new event
+   * Only ORGANIZER and ADMIN roles can create events
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
   @Post()
   async create(
     @CurrentUser('organizerId') organizerId: string,
@@ -55,7 +62,12 @@ export class EventsController {
     return this.eventsService.create(organizerId, dto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  /**
+   * Update an existing event
+   * Only ORGANIZER and ADMIN roles can update events
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
   @Patch(':id')
   async update(
     @Param('id') id: string,
@@ -65,7 +77,12 @@ export class EventsController {
     return this.eventsService.update(id, organizerId, dto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  /**
+   * Get organizer's events
+   * Only ORGANIZER and ADMIN roles can access
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
   @Get('organizer/my-events')
   async getMyEvents(@CurrentUser('organizerId') organizerId: string) {
     return this.eventsService.getOrganizerEvents(organizerId);
