@@ -68,8 +68,8 @@ export function Navbar() {
       className={clsx(
         'fixed top-0 left-0 right-0 z-50 transition-all duration-500',
         scrolled
-          ? 'bg-dark-bg/80 backdrop-blur-xl border-b border-white/5 shadow-lg shadow-black/20'
-          : 'bg-transparent'
+          ? 'bg-dark-bg/90 backdrop-blur-xl border-b border-white/5'
+          : ''
       )}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -83,62 +83,51 @@ export function Navbar() {
             />
           </Link>
 
-          {/* Desktop Navigation - Glass Morphism Style */}
-          <div className="hidden md:flex items-center">
-            <div className={clsx(
-              'flex items-center gap-1 px-2 py-1.5 rounded-full transition-all duration-500',
-              scrolled ? 'bg-white/[0.03]' : 'bg-white/[0.05] backdrop-blur-md border border-white/[0.08]'
-            )}>
-              {navLinks.map((link) => (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  className={clsx(
-                    'relative px-4 py-2 rounded-full text-sm font-medium transition-all duration-300',
-                    isActive(link.path)
-                      ? 'text-dark-bg bg-white'
-                      : 'text-white/70 hover:text-white hover:bg-white/[0.08]'
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    <link.icon className="w-4 h-4" />
-                    {link.label}
-                  </span>
-                </Link>
-              ))}
-              {isAuthenticated && (
-                <Link
-                  to="/tickets"
-                  className={clsx(
-                    'relative px-4 py-2 rounded-full text-sm font-medium transition-all duration-300',
-                    isActive('/tickets')
-                      ? 'text-dark-bg bg-white'
-                      : 'text-white/70 hover:text-white hover:bg-white/[0.08]'
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    <Ticket className="w-4 h-4" />
-                    Tickets
-                  </span>
-                </Link>
-              )}
-              {isAuthenticated && primaryDashboard && (
-                <Link
-                  to={primaryDashboard.path}
-                  className={clsx(
-                    'relative px-4 py-2 rounded-full text-sm font-medium transition-all duration-300',
-                    isActive(primaryDashboard.path)
-                      ? 'text-dark-bg bg-white'
-                      : 'text-white/70 hover:text-white hover:bg-white/[0.08]'
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    <primaryDashboard.icon className="w-4 h-4" />
-                    {primaryDashboard.label}
-                  </span>
-                </Link>
-              )}
-            </div>
+          {/* Desktop Navigation - Clean Links */}
+          <div className="hidden md:flex items-center gap-8">
+            {navLinks.map((link) => (
+              <Link
+                key={link.path}
+                to={link.path}
+                className={clsx(
+                  'flex items-center gap-2 text-sm font-medium transition-all duration-300',
+                  isActive(link.path)
+                    ? 'text-white'
+                    : 'text-white/60 hover:text-white'
+                )}
+              >
+                <link.icon className="w-4 h-4" />
+                {link.label}
+              </Link>
+            ))}
+            {isAuthenticated && (
+              <Link
+                to="/tickets"
+                className={clsx(
+                  'flex items-center gap-2 text-sm font-medium transition-all duration-300',
+                  isActive('/tickets')
+                    ? 'text-white'
+                    : 'text-white/60 hover:text-white'
+                )}
+              >
+                <Ticket className="w-4 h-4" />
+                Tickets
+              </Link>
+            )}
+            {isAuthenticated && primaryDashboard && (
+              <Link
+                to={primaryDashboard.path}
+                className={clsx(
+                  'flex items-center gap-2 text-sm font-medium transition-all duration-300',
+                  isActive(primaryDashboard.path)
+                    ? 'text-white'
+                    : 'text-white/60 hover:text-white'
+                )}
+              >
+                <primaryDashboard.icon className="w-4 h-4" />
+                {primaryDashboard.label}
+              </Link>
+            )}
           </div>
 
           {/* Auth Buttons */}

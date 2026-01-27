@@ -365,54 +365,58 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* Featured Events - Modern Design with Parallax */}
-      <section className="py-32 relative overflow-hidden">
-        {/* Parallax Background */}
+      {/* Featured Events - Horizontal Scroll with Background */}
+      <section className="py-24 lg:py-32 relative overflow-hidden">
+        {/* Background Image Overlay */}
         <div className="absolute inset-0">
-          <div
-            className="absolute inset-0 bg-cover bg-center bg-fixed opacity-20"
-            style={{ backgroundImage: 'url(/hero/concert.jpeg)' }}
+          <img
+            src="https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=1920&h=1080&fit=crop"
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover opacity-15"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-dark-bg via-dark-bg/95 to-dark-bg" />
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5" />
+          <div className="absolute inset-0 bg-gradient-to-b from-dark-bg via-dark-bg/90 to-dark-bg" />
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-900/20 via-transparent to-primary/20" />
         </div>
 
-        {/* Floating Elements */}
+        {/* Ambient Glow */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-40 right-20 w-64 h-64 bg-primary/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-40 left-20 w-64 h-64 bg-accent/10 rounded-full blur-3xl" />
+          <div className="absolute top-1/4 right-0 w-[500px] h-[500px] bg-primary/20 rounded-full blur-[150px]" />
+          <div className="absolute bottom-1/4 left-0 w-[500px] h-[500px] bg-purple-500/20 rounded-full blur-[150px]" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="relative z-10">
           {/* Section Header */}
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-16">
-            <div>
-              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-6">
-                <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                Live & Upcoming
-              </span>
-              <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-tight">
-                Featured
-                <span className="block text-gradient">Events</span>
-              </h2>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-12">
+              <div>
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-6">
+                  <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                  Live & Upcoming
+                </span>
+                <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-tight">
+                  Featured
+                  <span className="block text-gradient">Events</span>
+                </h2>
+              </div>
+              <Link to="/events" className="group">
+                <span className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white font-medium transition-all duration-300 hover:bg-white/10 hover:border-white/20 backdrop-blur-sm">
+                  View All Events
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </span>
+              </Link>
             </div>
-            <Link to="/events" className="group">
-              <span className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white font-medium transition-all duration-300 hover:bg-white/10 hover:border-white/20 backdrop-blur-sm">
-                View All Events
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </span>
-            </Link>
           </div>
 
+          {/* Events Horizontal Scroll */}
           {isLoading ? (
-            <div className="flex items-center justify-center py-32">
+            <div className="flex items-center justify-center py-20">
               <div className="relative">
                 <div className="w-16 h-16 border-4 border-white/10 rounded-full" />
                 <div className="absolute inset-0 w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
             </div>
           ) : error ? (
-            <div className="text-center py-32">
+            <div className="text-center py-20 max-w-7xl mx-auto px-4">
               <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-6">
                 <Calendar className="w-10 h-10 text-red-400" />
               </div>
@@ -425,7 +429,7 @@ export function HomePage() {
               </button>
             </div>
           ) : events.length === 0 ? (
-            <div className="text-center py-32">
+            <div className="text-center py-20 max-w-7xl mx-auto px-4">
               <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-6">
                 <Calendar className="w-10 h-10 text-white/30" />
               </div>
@@ -433,10 +437,32 @@ export function HomePage() {
               <p className="text-white/30 text-sm mt-2">Check back soon for upcoming events</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {events.slice(0, 8).map((event) => (
-                <EventCard key={event.id} event={event} />
-              ))}
+            <div className="relative">
+              {/* Scroll Container */}
+              <div className="overflow-x-auto scrollbar-hide pb-4">
+                <div className="flex gap-6 px-4 sm:px-6 lg:px-8" style={{ paddingLeft: 'max(1rem, calc((100vw - 80rem) / 2 + 2rem))' }}>
+                  {events.slice(0, 10).map((event) => (
+                    <div key={event.id} className="flex-shrink-0 w-[300px] sm:w-[340px]">
+                      <EventCard event={event} />
+                    </div>
+                  ))}
+                  {/* View All Card */}
+                  <Link
+                    to="/events"
+                    className="flex-shrink-0 w-[300px] sm:w-[340px] h-full min-h-[400px] rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm flex flex-col items-center justify-center gap-4 transition-all duration-300 hover:bg-white/10 hover:border-white/20 group"
+                  >
+                    <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition-colors">
+                      <ArrowRight className="w-8 h-8 text-primary group-hover:translate-x-1 transition-transform" />
+                    </div>
+                    <span className="text-white font-semibold text-lg">View All Events</span>
+                    <span className="text-white/50 text-sm">Discover more experiences</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Scroll Fade Indicators */}
+              <div className="absolute left-0 top-0 bottom-4 w-8 bg-gradient-to-r from-dark-bg to-transparent pointer-events-none" />
+              <div className="absolute right-0 top-0 bottom-4 w-8 bg-gradient-to-l from-dark-bg to-transparent pointer-events-none" />
             </div>
           )}
         </div>
