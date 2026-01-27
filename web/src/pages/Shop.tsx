@@ -200,7 +200,7 @@ export function ShopPage() {
 
       // If payment required, initiate payment
       if (result.data.paymentRequired > 0) {
-        const paymentResult = await paymentsApi.initiate(result.data.order.id, 'CHAPA');
+        const paymentResult = await paymentsApi.initiate(result.data.order.id, 'TELEBIRR');
         if (paymentResult.error) {
           setCheckoutError(paymentResult.error);
           setIsCheckingOut(false);

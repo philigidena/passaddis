@@ -124,7 +124,7 @@ export function EventDetailPage() {
       const order = orderResponse.data!.order;
 
       // Initiate payment
-      const paymentResponse = await paymentsApi.initiate(order.id, 'CHAPA');
+      const paymentResponse = await paymentsApi.initiate(order.id, 'TELEBIRR');
 
       if (paymentResponse.error) {
         setPurchaseError(paymentResponse.error);
