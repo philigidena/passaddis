@@ -2,10 +2,13 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelebirrProvider, TelebirrCallbackData } from './providers/telebirr.provider';
+import { TicketsService } from '../tickets/tickets.service';
 import {
   InitiatePaymentDto,
   PaymentMethod,
@@ -24,6 +27,8 @@ export class PaymentsService {
     private prisma: PrismaService,
     private configService: ConfigService,
     private telebirrProvider: TelebirrProvider,
+    @Inject(forwardRef(() => TicketsService))
+    private ticketsService: TicketsService,
   ) {
     this.frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:8081';
@@ -231,6 +236,16 @@ export class PaymentsService {
       }
     });
 
+    // Create tickets for paid ticket orders (outside transaction to avoid deadlocks)
+    if (isSuccess) {
+      try {
+        await this.ticketsService.createTicketsForPaidOrder(payment.orderId);
+      } catch (error) {
+        console.error(`❌ Failed to create tickets for order ${payment.orderId}:`, error);
+        // Don't fail the callback - payment is still successful
+      }
+    }
+
     return { success: true, message: 'Payment processed' };
   }
 
@@ -319,6 +334,13 @@ export class PaymentsService {
             }
           }
         });
+
+        // Create tickets for paid ticket orders
+        try {
+          await this.ticketsService.createTicketsForPaidOrder(order.id);
+        } catch (error) {
+          console.error(`❌ Failed to create tickets for order ${order.id}:`, error);
+        }
 
         return {
           verified: true,
@@ -436,6 +458,13 @@ export class PaymentsService {
         }
       }
     });
+
+    // Create tickets for paid ticket orders
+    try {
+      await this.ticketsService.createTicketsForPaidOrder(payment.orderId);
+    } catch (error) {
+      console.error(`❌ Failed to create tickets for order ${payment.orderId}:`, error);
+    }
 
     console.log(`✅ Test payment completed: ${paymentId}`);
 

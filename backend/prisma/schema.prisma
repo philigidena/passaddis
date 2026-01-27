@@ -594,6 +594,9 @@ model Order {
   pickedUpAt      DateTime?
   settledAt       DateTime?     // When merchant was paid
 
+  // Ticket purchase metadata (stored until payment confirmed)
+  ticketMetadata  Json?         // Stores {eventId, tickets: [{ticketTypeId, quantity, price}]}
+
   // Cancellation support
   cancelledAt     DateTime?
   cancelledBy     String?       // 'user', 'admin', or 'system'

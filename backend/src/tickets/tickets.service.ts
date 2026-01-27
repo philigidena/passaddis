@@ -131,38 +131,104 @@ export class TicketsService {
     const serviceFee = Math.round(subtotal * 0.05);
     const total = subtotal + serviceFee;
 
-    // Create order and tickets in transaction
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Generate order number
-      const orderNumber = `PA${Date.now().toString(36).toUpperCase()}`;
+    // Create order with ticket metadata (tickets created AFTER payment)
+    const orderNumber = `PA${Date.now().toString(36).toUpperCase()}`;
 
-      // Create order
-      const order = await tx.order.create({
-        data: {
-          orderNumber,
-          userId,
-          subtotal,
-          serviceFee,
-          total,
-          status: 'PENDING',
-        },
-      });
+    const order = await this.prisma.order.create({
+      data: {
+        orderNumber,
+        userId,
+        subtotal,
+        serviceFee,
+        total,
+        status: 'PENDING',
+        // Store ticket details - tickets will be created after payment
+        ticketMetadata: {
+          eventId,
+          tickets: ticketCreations,
+        } as any,
+      },
+    });
 
-      // Create tickets and update sold counts
-      const createdTickets = [];
+    console.log(`📝 Order ${order.orderNumber} created - awaiting payment for ${ticketCreations.reduce((sum, t) => sum + t.quantity, 0)} tickets`);
+
+    return {
+      order,
+      tickets: [], // No tickets until payment is confirmed
+      paymentRequired: total,
+    };
+  }
+
+  /**
+   * Create tickets after payment is confirmed
+   * Called by PaymentsService when payment succeeds
+   */
+  async createTicketsForPaidOrder(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { tickets: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Already has tickets - don't create duplicates
+    if (order.tickets.length > 0) {
+      console.log(`⚠️ Order ${orderId} already has ${order.tickets.length} tickets`);
+      return order.tickets;
+    }
+
+    const metadata = order.ticketMetadata as any;
+    if (!metadata || !metadata.eventId || !metadata.tickets) {
+      // Not a ticket order (might be shop order)
+      console.log(`ℹ️ Order ${orderId} is not a ticket order`);
+      return [];
+    }
+
+    const { eventId, tickets: ticketCreations } = metadata;
+
+    // Verify event still exists and is valid
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: { ticketTypes: true },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event no longer exists');
+    }
+
+    // Create tickets and update sold counts in transaction
+    const createdTickets = await this.prisma.$transaction(async (tx) => {
+      const tickets = [];
+
       for (const item of ticketCreations) {
+        // Verify availability one more time
+        const ticketType = event.ticketTypes.find((tt) => tt.id === item.ticketTypeId);
+        if (!ticketType) {
+          throw new NotFoundException(`Ticket type ${item.ticketTypeId} not found`);
+        }
+
+        const available = ticketType.quantity - ticketType.sold;
+        if (item.quantity > available) {
+          throw new ConflictException(
+            `Only ${available} tickets available for ${ticketType.name}. Order cannot be fulfilled.`,
+          );
+        }
+
+        // Create tickets
         for (let i = 0; i < item.quantity; i++) {
           const qrCode = this.generateQrCode();
           const ticket = await tx.ticket.create({
             data: {
               qrCode,
-              userId,
+              userId: order.userId,
               eventId,
               ticketTypeId: item.ticketTypeId,
               orderId: order.id,
             },
           });
-          createdTickets.push(ticket);
+          tickets.push(ticket);
         }
 
         // Update sold count
@@ -172,14 +238,11 @@ export class TicketsService {
         });
       }
 
-      return { order, tickets: createdTickets };
+      return tickets;
     });
 
-    return {
-      order: result.order,
-      tickets: result.tickets,
-      paymentRequired: total,
-    };
+    console.log(`✅ Created ${createdTickets.length} tickets for paid order ${order.orderNumber}`);
+    return createdTickets;
   }
 
   // Get user's tickets

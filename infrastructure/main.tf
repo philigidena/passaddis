@@ -118,13 +118,16 @@ module "apprunner" {
   s3_bucket_name = module.s3.bucket_name
   s3_bucket_arn  = module.s3.bucket_arn
 
-  # Extra environment variables (Chapa, SMS, etc.)
+  # Extra environment variables (Telebirr, SMS, etc.)
   extra_environment_variables = {
-    CHAPA_SECRET_KEY     = var.chapa_secret_key
-    CHAPA_WEBHOOK_SECRET = var.chapa_webhook_secret
-    AFRO_SMS_API_KEY     = var.afro_sms_api_key
-    AFRO_SMS_IDENTIFIER  = var.afro_sms_identifier
-    AFRO_SMS_SENDER      = var.afro_sms_sender
+    TELEBIRR_MERCHANT_APP_ID = var.telebirr_merchant_app_id
+    TELEBIRR_FABRIC_APP_ID   = var.telebirr_fabric_app_id
+    TELEBIRR_APP_SECRET      = var.telebirr_app_secret
+    TELEBIRR_SHORT_CODE      = var.telebirr_short_code
+    TELEBIRR_PRIVATE_KEY     = var.telebirr_private_key
+    AFRO_SMS_API_KEY         = var.afro_sms_api_key
+    AFRO_SMS_IDENTIFIER      = var.afro_sms_identifier
+    AFRO_SMS_SENDER          = var.afro_sms_sender
   }
 
   # Instance configuration (cost optimized)
@@ -156,9 +159,12 @@ module "elasticbeanstalk" {
   s3_bucket_arn  = module.s3.bucket_arn
 
   # Payment & SMS configuration
-  chapa_secret_key     = var.chapa_secret_key
-  chapa_webhook_secret = var.chapa_webhook_secret
-  afro_sms_api_key     = var.afro_sms_api_key
-  afro_sms_identifier  = var.afro_sms_identifier
-  afro_sms_sender      = var.afro_sms_sender
+  telebirr_merchant_app_id = var.telebirr_merchant_app_id
+  telebirr_fabric_app_id   = var.telebirr_fabric_app_id
+  telebirr_app_secret      = var.telebirr_app_secret
+  telebirr_short_code      = var.telebirr_short_code
+  telebirr_private_key     = var.telebirr_private_key
+  afro_sms_api_key         = var.afro_sms_api_key
+  afro_sms_identifier      = var.afro_sms_identifier
+  afro_sms_sender          = var.afro_sms_sender
 }

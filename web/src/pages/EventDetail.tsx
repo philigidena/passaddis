@@ -132,7 +132,7 @@ export function EventDetailPage() {
         return;
       }
 
-      // Redirect to Chapa checkout
+      // Redirect to Telebirr checkout
       const checkoutUrl = paymentResponse.data?.checkout_url;
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
@@ -353,7 +353,7 @@ export function EventDetailPage() {
 
               {/* Payment Info */}
               <p className="text-center text-white/40 text-xs mt-4">
-                Secure payment powered by Chapa
+                Secure payment powered by Telebirr
               </p>
             </div>
           </div>

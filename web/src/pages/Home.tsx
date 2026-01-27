@@ -94,7 +94,7 @@ export function HomePage() {
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">2. Pay Securely</h3>
               <p className="text-white/60">
-                Pay with Telebirr, CBE Birr, or bank transfer via Chapa
+                Pay securely with Telebirr mobile money
               </p>
             </div>
 
@@ -176,7 +176,7 @@ export function HomePage() {
               <div>
                 <h3 className="text-lg font-semibold text-white mb-2">Secure Payments</h3>
                 <p className="text-white/60 text-sm">
-                  All payments processed securely through Chapa payment gateway
+                  All payments processed securely through Telebirr
                 </p>
               </div>
             </div>

@@ -146,7 +146,7 @@ export function PassAddisPay({
       const checkoutUrl = response.data.checkoutUrl || response.data.checkout_url;
       const txRef = response.data.txRef || response.data.tx_ref;
 
-      // Open Chapa checkout in browser
+      // Open Telebirr checkout in browser
       const supported = await Linking.canOpenURL(checkoutUrl);
       if (supported) {
         await Linking.openURL(checkoutUrl);
