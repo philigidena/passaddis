@@ -99,4 +99,19 @@ export class PaymentsController {
   ) {
     return this.paymentsService.completeTestPayment(userId, paymentId);
   }
+
+  /**
+   * Request a refund for a completed order
+   * Only the order owner can request a refund
+   * Refunds are not allowed for used tickets
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('refund/:orderId')
+  async requestRefund(
+    @CurrentUser('id') userId: string,
+    @Param('orderId') orderId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.paymentsService.requestRefund(userId, orderId, body.reason);
+  }
 }

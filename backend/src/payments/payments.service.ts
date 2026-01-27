@@ -474,4 +474,129 @@ export class PaymentsService {
       orderId: payment.orderId,
     };
   }
+
+  /**
+   * Request a refund for a completed payment
+   * Only admins or the order owner can request refunds
+   */
+  async requestRefund(userId: string, orderId: string, reason?: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        payment: true,
+        tickets: true,
+        items: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.userId !== userId) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (!order.payment || order.payment.status !== 'COMPLETED') {
+      throw new BadRequestException('No completed payment found for this order');
+    }
+
+    if (order.status === 'REFUNDED') {
+      throw new BadRequestException('Order has already been refunded');
+    }
+
+    // Check if tickets have been used (scanned)
+    const usedTickets = order.tickets.filter((t) => t.status === 'USED');
+    if (usedTickets.length > 0) {
+      throw new BadRequestException(
+        `Cannot refund: ${usedTickets.length} ticket(s) have already been used`,
+      );
+    }
+
+    // Get transaction reference from payment
+    const transactionId = order.payment.providerRef || order.paymentRef;
+    if (!transactionId) {
+      throw new BadRequestException('Payment transaction reference not found');
+    }
+
+    // Request refund from Telebirr
+    const refundResult = await this.telebirrProvider.refundPayment({
+      orderId: transactionId,
+      transactionId: transactionId,
+      amount: order.payment.amount,
+      reason: reason || 'Customer requested refund',
+    });
+
+    if (!refundResult.success) {
+      console.error('❌ Telebirr refund failed:', refundResult.error);
+      throw new BadRequestException(refundResult.error || 'Refund request failed');
+    }
+
+    // Update order and payment status
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: order.payment!.id },
+        data: {
+          status: 'REFUNDED',
+          providerData: {
+            ...(order.payment!.providerData as object || {}),
+            refundOrderId: refundResult.refundOrderId,
+            refundStatus: refundResult.refundStatus,
+            refundedAt: new Date().toISOString(),
+          } as any,
+        },
+      });
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: 'REFUNDED',
+        },
+      });
+
+      // Cancel any unused tickets
+      if (order.tickets.length > 0) {
+        await tx.ticket.updateMany({
+          where: {
+            orderId: order.id,
+            status: 'VALID',
+          },
+          data: {
+            status: 'CANCELLED',
+          },
+        });
+
+        // Restore ticket availability
+        for (const ticket of order.tickets) {
+          if (ticket.status === 'VALID') {
+            await tx.ticketType.update({
+              where: { id: ticket.ticketTypeId },
+              data: { sold: { decrement: 1 } },
+            });
+          }
+        }
+      }
+
+      // Restore stock for shop items
+      if (order.items.length > 0) {
+        for (const item of order.items) {
+          await tx.shopItem.update({
+            where: { id: item.shopItemId },
+            data: {
+              stockQuantity: { increment: item.quantity },
+            },
+          });
+        }
+      }
+    });
+
+    console.log(`✅ Refund processed for order ${order.id}: ${refundResult.refundOrderId}`);
+
+    return {
+      success: true,
+      message: 'Refund processed successfully',
+      refundOrderId: refundResult.refundOrderId,
+      refundStatus: refundResult.refundStatus,
+    };
+  }
 }

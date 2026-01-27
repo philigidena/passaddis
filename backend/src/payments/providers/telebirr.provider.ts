@@ -36,6 +36,20 @@ export interface TelebirrCallbackData {
   sign?: string;
 }
 
+export interface TelebirrRefundRequest {
+  orderId: string;           // Original merchant order ID
+  transactionId: string;     // Payment transaction ID (from Telebirr)
+  amount: number;            // Amount to refund
+  reason?: string;           // Optional refund reason
+}
+
+export interface TelebirrRefundResponse {
+  success: boolean;
+  refundOrderId?: string;
+  refundStatus?: string;
+  error?: string;
+}
+
 /**
  * Telebirr C2B WebCheckout Payment Provider
  *
@@ -71,8 +85,10 @@ export class TelebirrProvider {
     this.baseUrl = apiUrl.replace('/payment/gateway', '');
 
     // Web Checkout Base URL (for redirect)
+    // Testbed: https://developerportal.ethiotelebirr.et:38443/payment/web/paygate?
+    // Production: https://telebirrappcube.ethiomobilemoney.et:38443/payment/web/paygate?
     this.webBaseUrl = this.configService.get<string>('TELEBIRR_WEB_CHECKOUT_URL') ||
-      'https://h5pay.telebirr.com/h5Pay?';
+      'https://developerportal.ethiotelebirr.et:38443/payment/web/paygate?';
   }
 
   /**
@@ -101,21 +117,36 @@ export class TelebirrProvider {
 
   /**
    * Sign request object with private key using SHA256WithRSA
+   *
+   * According to Telebirr docs:
+   * 1. Exclude sign and sign_type fields
+   * 2. Flatten biz_content fields into the main map
+   * 3. Sort all fields alphabetically (A-Z)
+   * 4. Join as key=value pairs with &
+   * 5. Sign with SHA256WithRSA (RSA-SHA256)
    */
   private signRequestObject(requestObj: any): string {
     try {
-      // Create string to sign: sort keys, concatenate key=value pairs
-      const sortedKeys = Object.keys(requestObj).sort();
-      const stringToSign = sortedKeys
-        .filter(key => key !== 'sign' && key !== 'sign_type')
-        .map(key => {
-          const value = requestObj[key];
-          if (typeof value === 'object') {
-            return `${key}=${JSON.stringify(value)}`;
-          }
-          return `${key}=${value}`;
-        })
-        .join('&');
+      const excludeFields = ['sign', 'sign_type', 'header', 'refund_info', 'openType', 'raw_request', 'biz_content'];
+      const fieldMap: Record<string, string> = {};
+
+      // Add top-level fields (excluding biz_content)
+      for (const key of Object.keys(requestObj)) {
+        if (excludeFields.includes(key)) continue;
+        fieldMap[key] = String(requestObj[key]);
+      }
+
+      // Flatten biz_content fields into the map
+      if (requestObj.biz_content) {
+        for (const key of Object.keys(requestObj.biz_content)) {
+          if (excludeFields.includes(key)) continue;
+          fieldMap[key] = String(requestObj.biz_content[key]);
+        }
+      }
+
+      // Sort keys alphabetically and build signature string
+      const sortedKeys = Object.keys(fieldMap).sort();
+      const stringToSign = sortedKeys.map(key => `${key}=${fieldMap[key]}`).join('&');
 
       console.log('📱 String to sign:', stringToSign);
 
@@ -463,6 +494,92 @@ export class TelebirrProvider {
     } catch (error) {
       console.error('❌ Query error:', error);
       return { success: false, status: 'UNKNOWN', message: 'Query failed' };
+    }
+  }
+
+  /**
+   * Step 8: Refund Order
+   * Process a refund for a previously successful payment
+   */
+  async refundPayment(request: TelebirrRefundRequest): Promise<TelebirrRefundResponse> {
+    console.log('📱 Telebirr Refund Request:', {
+      orderId: request.orderId,
+      transactionId: request.transactionId,
+      amount: request.amount,
+    });
+
+    if (!this.isConfigured()) {
+      return {
+        success: false,
+        error: 'Telebirr not configured',
+      };
+    }
+
+    try {
+      // Step 1: Get Fabric Token
+      const fabricToken = await this.applyFabricToken();
+      if (!fabricToken) {
+        return {
+          success: false,
+          error: 'Failed to authenticate with Telebirr',
+        };
+      }
+
+      // Step 2: Create Refund Request
+      const req: any = {
+        timestamp: this.createTimestamp(),
+        nonce_str: this.createNonceStr(),
+        method: 'payment.refund',
+        version: '1.0',
+      };
+
+      const biz = {
+        appid: this.merchantAppId,
+        merch_code: this.shortCode,
+        merch_order_id: request.orderId,
+        refund_request_no: request.transactionId, // Transaction ID from original payment
+        actual_amount: request.amount.toString(),
+        trans_currency: 'ETB',
+        refund_reason: request.reason || 'Customer refund request',
+      };
+
+      req.biz_content = biz;
+      req.sign = this.signRequestObject(req);
+      req.sign_type = 'SHA256WithRSA';
+
+      console.log('📱 Refund Request:', JSON.stringify(req, null, 2));
+
+      const url = `${this.baseUrl}/payment/v1/merchant/refund`;
+      const result = await this.makeRequest(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-APP-Key': this.fabricAppId,
+          'Authorization': fabricToken,
+        },
+      }, req);
+
+      console.log('📱 Refund Response:', JSON.stringify(result, null, 2));
+
+      if (result.result === 'SUCCESS' && result.code === '0') {
+        return {
+          success: true,
+          refundOrderId: result.biz_content?.refund_order_id,
+          refundStatus: result.biz_content?.refund_status,
+        };
+      }
+
+      return {
+        success: false,
+        error: result.msg || 'Refund failed',
+        refundStatus: result.biz_content?.refund_status,
+      };
+    } catch (error) {
+      console.error('❌ Refund error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Refund service unavailable',
+      };
     }
   }
 }
