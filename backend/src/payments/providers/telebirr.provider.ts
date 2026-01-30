@@ -121,10 +121,10 @@ export class TelebirrProvider {
   }
 
   /**
-   * Create timestamp in required format (Unix timestamp in milliseconds - 13 digits)
+   * Create timestamp in required format (Unix timestamp in seconds - 10 digits)
    */
   private createTimestamp(): string {
-    return Date.now().toString();
+    return Math.floor(Date.now() / 1000).toString();
   }
 
   /**
