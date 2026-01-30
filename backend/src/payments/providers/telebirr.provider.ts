@@ -103,10 +103,10 @@ export class TelebirrProvider {
       'https://developerportal.ethiotelebirr.et:38443/apiaccess/payment/gateway';
 
     // Web Checkout Base URL (for redirect)
-    // Testbed: https://developerportal.ethiotelebirr.et:38443/payment/web/paygate?
+    // Testbed: https://196.188.120.3:38443/payment/web/paygate?
     // Production: https://telebirrappcube.ethiomobilemoney.et:38443/payment/web/paygate?
     this.webBaseUrl = this.configService.get<string>('TELEBIRR_WEB_CHECKOUT_URL') ||
-      'https://developerportal.ethiotelebirr.et:38443/payment/web/paygate?';
+      'https://196.188.120.3:38443/payment/web/paygate?';
 
     console.log('📱 Telebirr configured with API base:', this.baseUrl);
     console.log('📱 Telebirr web checkout base:', this.webBaseUrl);
@@ -121,12 +121,10 @@ export class TelebirrProvider {
   }
 
   /**
-   * Create timestamp in required format (YYYYMMDDHHmmss)
+   * Create timestamp in required format (Unix timestamp in milliseconds - 13 digits)
    */
   private createTimestamp(): string {
-    const now = new Date();
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    return Date.now().toString();
   }
 
   /**
@@ -297,7 +295,7 @@ export class TelebirrProvider {
     notifyUrl: string,
     redirectUrl: string,
     callbackInfo?: string,
-  ): Promise<{ prepayId: string; outTradeNo: string } | null> {
+  ): Promise<{ prepayId: string; outTradeNo: string } | { error: string }> {
     try {
       const outTradeNo = `PA${Date.now()}`;
 
@@ -308,24 +306,28 @@ export class TelebirrProvider {
         version: '1.0',
       };
 
-      // WebCheckout specific: trade_type is "Checkout" and includes redirect_url
-      const biz = {
+      // Match the official documentation example exactly
+      // Only include required fields + optional redirect_url
+      const biz: any = {
         notify_url: notifyUrl,
         appid: this.merchantAppId,
         merch_code: this.shortCode,
         merch_order_id: outTradeNo,
-        trade_type: 'Checkout', // WebCheckout type
+        trade_type: 'Checkout',
         title: title,
         total_amount: amount.toString(),
         trans_currency: 'ETB',
         timeout_express: '120m',
         business_type: 'BuyGoods',
-        payee_identifier: this.shortCode,
-        payee_identifier_type: '04',
-        payee_type: '5000',
-        redirect_url: redirectUrl, // Where to redirect after payment
-        callback_info: callbackInfo || 'PassAddis Payment',
+        redirect_url: redirectUrl,
       };
+
+      // Add optional payee fields
+      if (this.shortCode) {
+        biz.payee_identifier = this.shortCode;
+        biz.payee_identifier_type = '04';
+        biz.payee_type = '5000';
+      }
 
       req.biz_content = biz;
       req.sign = this.signRequestObject(req);
@@ -352,11 +354,15 @@ export class TelebirrProvider {
         };
       }
 
-      console.error('❌ PreOrder failed:', result);
-      return null;
+      // Return actual error from Telebirr
+      const errorMsg = result.msg || result.errorMsg || result.message ||
+        result.biz_content?.msg || result.biz_content?.error ||
+        JSON.stringify(result);
+      console.error('❌ PreOrder failed:', errorMsg);
+      return { error: `Telebirr PreOrder error: ${errorMsg}` };
     } catch (error) {
       console.error('❌ PreOrder error:', error);
-      return null;
+      return { error: error instanceof Error ? error.message : 'PreOrder request failed' };
     }
   }
 
@@ -375,6 +381,7 @@ export class TelebirrProvider {
     const sign = this.signRequestObject(map);
 
     // Order by ASCII and create raw request string
+    // Match Telebirr's sample code exactly - no URL encoding
     const rawRequest = [
       `appid=${map.appid}`,
       `merch_code=${map.merch_code}`,
@@ -439,10 +446,10 @@ export class TelebirrProvider {
         request.callbackInfo,
       );
 
-      if (!orderResult) {
+      if ('error' in orderResult) {
         return {
           success: false,
-          error: 'Failed to create payment order',
+          error: orderResult.error,
         };
       }
 

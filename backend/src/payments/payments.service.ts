@@ -243,7 +243,7 @@ export class PaymentsService {
       method: 'TELEBIRR',
       checkout_url: result.checkoutUrl,
       raw_request: result.rawRequest,
-      web_base_url: 'https://developerportal.ethiotelebirr.et:38443/payment/web/paygate',
+      web_base_url: 'https://196.188.120.3:38443/payment/web/paygate',
       tx_ref: result.outTradeNo,
     };
   }
