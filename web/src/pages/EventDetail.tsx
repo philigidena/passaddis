@@ -132,13 +132,44 @@ export function EventDetailPage() {
         return;
       }
 
-      // Redirect to Telebirr checkout
-      const checkoutUrl = paymentResponse.data?.checkout_url;
-      if (checkoutUrl) {
-        window.location.href = checkoutUrl;
+      // Use Telebirr startPay POST method
+      const rawRequest = paymentResponse.data?.raw_request;
+      const webBaseUrl = paymentResponse.data?.web_base_url;
+
+      if (rawRequest && webBaseUrl) {
+        // Parse rawRequest parameters and create POST form
+        const params = new URLSearchParams(rawRequest);
+
+        // Add version and trade_type
+        params.set('version', '1.0');
+        params.set('trade_type', 'Checkout');
+
+        // Create form and submit via POST
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = webBaseUrl;
+        form.style.display = 'none';
+
+        // Add all parameters as hidden inputs
+        params.forEach((value, key) => {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = key;
+          input.value = value;
+          form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
       } else {
-        setPurchaseError('Payment service temporarily unavailable. Please try again later.');
-        setIsPurchasing(false);
+        // Fallback to checkout URL redirect
+        const checkoutUrl = paymentResponse.data?.checkout_url;
+        if (checkoutUrl) {
+          window.location.href = checkoutUrl;
+        } else {
+          setPurchaseError('Payment service temporarily unavailable. Please try again later.');
+          setIsPurchasing(false);
+        }
       }
     } catch (err) {
       console.error('Purchase error:', err);

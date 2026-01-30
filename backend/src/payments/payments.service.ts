@@ -242,6 +242,8 @@ export class PaymentsService {
       amount: order.total,
       method: 'TELEBIRR',
       checkout_url: result.checkoutUrl,
+      raw_request: result.rawRequest,
+      web_base_url: 'https://developerportal.ethiotelebirr.et:38443/payment/web/paygate',
       tx_ref: result.outTradeNo,
     };
   }

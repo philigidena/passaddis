@@ -194,6 +194,8 @@ export interface PaymentInitiation {
   method: string;
   success: boolean;
   checkout_url?: string;
+  raw_request?: string;
+  web_base_url?: string;
   tx_ref?: string;
 }
 

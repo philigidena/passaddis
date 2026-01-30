@@ -206,7 +206,39 @@ export function ShopPage() {
           setIsCheckingOut(false);
           return;
         }
-        if (paymentResult.data?.checkout_url) {
+
+        // Use Telebirr startPay POST method
+        const rawRequest = paymentResult.data?.raw_request;
+        const webBaseUrl = paymentResult.data?.web_base_url;
+
+        if (rawRequest && webBaseUrl) {
+          // Parse rawRequest parameters and create POST form
+          const params = new URLSearchParams(rawRequest);
+
+          // Add version and trade_type
+          params.set('version', '1.0');
+          params.set('trade_type', 'Checkout');
+
+          // Create form and submit via POST
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = webBaseUrl;
+          form.style.display = 'none';
+
+          // Add all parameters as hidden inputs
+          params.forEach((value, key) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+          });
+
+          document.body.appendChild(form);
+          form.submit();
+          return;
+        } else if (paymentResult.data?.checkout_url) {
+          // Fallback to checkout URL redirect
           window.location.href = paymentResult.data.checkout_url;
           return;
         } else {
