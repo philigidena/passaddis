@@ -128,10 +128,16 @@ export class TelebirrProvider {
   }
 
   /**
-   * Create nonce string (random 32 char hex)
+   * Create nonce string (random 32 char alphanumeric - uppercase + digits)
+   * Matches Telebirr demo: 0-9, A-Z
    */
   private createNonceStr(): string {
-    return crypto.randomBytes(16).toString('hex');
+    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let result = '';
+    for (let i = 0; i < 32; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   }
 
   /**
@@ -381,14 +387,14 @@ export class TelebirrProvider {
     const sign = this.signRequestObject(map);
 
     // Order by ASCII and create raw request string
-    // Match Telebirr's sample code exactly - no URL encoding
+    // URL encode the sign to prevent + becoming space
     const rawRequest = [
       `appid=${map.appid}`,
       `merch_code=${map.merch_code}`,
       `nonce_str=${map.nonce_str}`,
       `prepay_id=${map.prepay_id}`,
       `timestamp=${map.timestamp}`,
-      `sign=${sign}`,
+      `sign=${encodeURIComponent(sign)}`,
       `sign_type=SHA256WithRSA`,
     ].join('&');
 
