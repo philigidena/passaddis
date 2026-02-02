@@ -146,19 +146,33 @@ export function PassAddisPay({
       const checkoutUrl = response.data.checkoutUrl || response.data.checkout_url;
       const txRef = response.data.txRef || response.data.tx_ref;
 
-      // Open Telebirr checkout in browser
-      const supported = await Linking.canOpenURL(checkoutUrl);
-      if (supported) {
-        await Linking.openURL(checkoutUrl);
-
-        // Start polling for payment status
-        setPaymentStatus('verifying');
-        pollPaymentStatus(orderId, txRef);
+      // Open Telebirr checkout using anchor approach (per Telebirr support)
+      // This works better than direct navigation for their payment gateway
+      if (Platform.OS === 'web') {
+        // Web: Use anchor element approach as recommended by Telebirr
+        const anchorEle = document.createElement('a');
+        anchorEle.setAttribute('href', checkoutUrl);
+        anchorEle.setAttribute('target', '_blank');
+        anchorEle.setAttribute('rel', 'external');
+        anchorEle.style.display = 'none';
+        document.body.appendChild(anchorEle);
+        anchorEle.click();
+        document.body.removeChild(anchorEle);
       } else {
-        onError?.('Cannot open payment page');
-        setIsProcessing(false);
-        setPaymentStatus('idle');
+        // Mobile: Use Linking API
+        const supported = await Linking.canOpenURL(checkoutUrl);
+        if (!supported) {
+          onError?.('Cannot open payment page');
+          setIsProcessing(false);
+          setPaymentStatus('idle');
+          return;
+        }
+        await Linking.openURL(checkoutUrl);
       }
+
+      // Start polling for payment status
+      setPaymentStatus('verifying');
+      pollPaymentStatus(orderId, txRef);
     } catch (error) {
       onError?.(error instanceof Error ? error.message : 'Payment failed');
       setIsProcessing(false);
