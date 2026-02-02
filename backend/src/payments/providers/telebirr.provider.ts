@@ -103,12 +103,12 @@ export class TelebirrProvider {
       'https://developerportal.ethiotelebirr.et:38443/apiaccess/payment/gateway';
 
     // Web Checkout Base URL (for redirect)
-    // Testbed: https://196.188.120.3:38443/payment/web/paygate?
+    // Testbed: https://developerportal.ethiotelebirr.et:38443/payment/web/paygate?
     // Production: https://telebirrappcube.ethiomobilemoney.et:38443/payment/web/paygate?
     this.webBaseUrl = this.configService.get<string>('TELEBIRR_WEB_CHECKOUT_URL') ||
-      'https://196.188.120.3:38443/payment/web/paygate?';
+      'https://developerportal.ethiotelebirr.et:38443/payment/web/paygate?';
 
-    // Note: For testbed, use the IP address (196.188.120.3) as the domain may not resolve
+    // Note: Use domain name for checkout URL (same as v39/v40 which worked)
 
     console.log('📱 Telebirr configured with API base:', this.baseUrl);
     console.log('📱 Telebirr web checkout base:', this.webBaseUrl);
@@ -383,13 +383,13 @@ export class TelebirrProvider {
 
     const sign = this.signRequestObject(map);
 
-    // URL encode the sign because base64 contains +, /, = which break URLs
+    // URL encode ALL parameters (matching v39 which worked)
     const rawRequest = [
-      `appid=${map.appid}`,
-      `merch_code=${map.merch_code}`,
-      `nonce_str=${map.nonce_str}`,
-      `prepay_id=${map.prepay_id}`,
-      `timestamp=${map.timestamp}`,
+      `appid=${encodeURIComponent(map.appid)}`,
+      `merch_code=${encodeURIComponent(map.merch_code)}`,
+      `nonce_str=${encodeURIComponent(map.nonce_str)}`,
+      `prepay_id=${encodeURIComponent(map.prepay_id)}`,
+      `timestamp=${encodeURIComponent(map.timestamp)}`,
       `sign=${encodeURIComponent(sign)}`,
       `sign_type=SHA256WithRSA`,
     ].join('&');

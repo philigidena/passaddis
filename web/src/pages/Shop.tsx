@@ -241,7 +241,7 @@ export function ShopPage() {
           // Fallback to checkout URL redirect using anchor element (per Telebirr support)
           const checkoutUrl = paymentResult.data.checkout_url;
           const anchorEle = document.createElement('a');
-          anchorEle.setAttribute('href', checkoutUrl);
+          anchorEle.setAttribute('href', checkoutUrl.trim());
           anchorEle.setAttribute('target', '_blank');
           anchorEle.setAttribute('rel', 'external');
           anchorEle.style.display = 'none';

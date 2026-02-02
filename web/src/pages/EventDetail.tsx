@@ -166,7 +166,7 @@ export function EventDetailPage() {
         const checkoutUrl = paymentResponse.data?.checkout_url;
         if (checkoutUrl) {
           const anchorEle = document.createElement('a');
-          anchorEle.setAttribute('href', checkoutUrl);
+          anchorEle.setAttribute('href', checkoutUrl.trim());
           anchorEle.setAttribute('target', '_blank');
           anchorEle.setAttribute('rel', 'external');
           anchorEle.style.display = 'none';

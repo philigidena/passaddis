@@ -148,10 +148,11 @@ export function PassAddisPay({
 
       // Open Telebirr checkout using anchor approach (per Telebirr support)
       // This works better than direct navigation for their payment gateway
+      const trimmedUrl = checkoutUrl.trim();
       if (Platform.OS === 'web') {
         // Web: Use anchor element approach as recommended by Telebirr
         const anchorEle = document.createElement('a');
-        anchorEle.setAttribute('href', checkoutUrl);
+        anchorEle.setAttribute('href', trimmedUrl);
         anchorEle.setAttribute('target', '_blank');
         anchorEle.setAttribute('rel', 'external');
         anchorEle.style.display = 'none';
@@ -160,14 +161,14 @@ export function PassAddisPay({
         document.body.removeChild(anchorEle);
       } else {
         // Mobile: Use Linking API
-        const supported = await Linking.canOpenURL(checkoutUrl);
+        const supported = await Linking.canOpenURL(trimmedUrl);
         if (!supported) {
           onError?.('Cannot open payment page');
           setIsProcessing(false);
           setPaymentStatus('idle');
           return;
         }
-        await Linking.openURL(checkoutUrl);
+        await Linking.openURL(trimmedUrl);
       }
 
       // Start polling for payment status
