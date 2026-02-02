@@ -387,14 +387,14 @@ export class TelebirrProvider {
     const sign = this.signRequestObject(map);
 
     // Order by ASCII and create raw request string
-    // URL encode the sign to prevent + becoming space
+    // No URL encoding per Telebirr documentation
     const rawRequest = [
       `appid=${map.appid}`,
       `merch_code=${map.merch_code}`,
       `nonce_str=${map.nonce_str}`,
       `prepay_id=${map.prepay_id}`,
       `timestamp=${map.timestamp}`,
-      `sign=${encodeURIComponent(sign)}`,
+      `sign=${sign}`,
       `sign_type=SHA256WithRSA`,
     ].join('&');
 
