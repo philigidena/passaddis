@@ -98,7 +98,7 @@ export class TelebirrProvider {
     // API Base URL - Use environment variable or default to testbed
     // Testbed API: https://developerportal.ethiotelebirr.et:38443/apiaccess/payment/gateway
     // Production API: https://telebirrappcube.ethiomobilemoney.et:38443/apiaccess/payment/gateway
-    // NOTE: Do NOT strip /payment/gateway - endpoints are appended to this base
+    // NOTE: Keep full URL - endpoints are appended to this base
     this.baseUrl = this.configService.get<string>('TELEBIRR_API_URL') ||
       'https://developerportal.ethiotelebirr.et:38443/apiaccess/payment/gateway';
 
@@ -107,6 +107,8 @@ export class TelebirrProvider {
     // Production: https://telebirrappcube.ethiomobilemoney.et:38443/payment/web/paygate?
     this.webBaseUrl = this.configService.get<string>('TELEBIRR_WEB_CHECKOUT_URL') ||
       'https://196.188.120.3:38443/payment/web/paygate?';
+
+    // Note: For testbed, use the IP address (196.188.120.3) as the domain may not resolve
 
     console.log('📱 Telebirr configured with API base:', this.baseUrl);
     console.log('📱 Telebirr web checkout base:', this.webBaseUrl);
@@ -121,34 +123,30 @@ export class TelebirrProvider {
   }
 
   /**
-   * Create timestamp in required format (Unix timestamp in seconds - 10 digits)
+   * Create timestamp - milliseconds (13 digits)
+   * Per Telebirr docs: string(13) and working v38 used Date.now()
    */
   private createTimestamp(): string {
-    return Math.floor(Date.now() / 1000).toString();
+    return Date.now().toString();
   }
 
   /**
-   * Create nonce string (random 32 char alphanumeric - uppercase + digits)
-   * Matches Telebirr demo: 0-9, A-Z
+   * Create nonce string (32 char lowercase hex)
+   * Working v38 used: crypto.randomBytes(16).toString('hex')
    */
   private createNonceStr(): string {
-    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    let result = '';
-    for (let i = 0; i < 32; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
+    return crypto.randomBytes(16).toString('hex');
   }
 
   /**
-   * Sign request object with private key using SHA256WithRSA (RSA-PSS)
+   * Sign request object with private key using SHA256WithRSA (PKCS#1 v1.5)
    *
    * According to Telebirr docs:
    * 1. Exclude sign, sign_type, biz_content (as object) fields
    * 2. Flatten biz_content fields into the main map
    * 3. Sort all fields alphabetically (A-Z)
    * 4. Join as key=value pairs with &
-   * 5. Sign with SHA256withRSAandMGF1 (RSA-PSS with SHA256)
+   * 5. Sign with RSA-SHA256 (PKCS#1 v1.5 padding)
    */
   private signRequestObject(requestObj: any): string {
     try {
@@ -181,7 +179,7 @@ export class TelebirrProvider {
         formattedKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----`;
       }
 
-      // Sign with RSA-PSS (SHA256withRSAandMGF1) as per Telebirr docs
+      // Sign with RSA-SHA256 using RSA-PSS padding (as in working v38)
       const sign = crypto.createSign('RSA-SHA256');
       sign.update(stringToSign);
       sign.end();
@@ -312,8 +310,7 @@ export class TelebirrProvider {
         version: '1.0',
       };
 
-      // Match the official documentation example exactly
-      // Only include required fields + optional redirect_url
+      // WebCheckout specific - matching working v38 structure
       const biz: any = {
         notify_url: notifyUrl,
         appid: this.merchantAppId,
@@ -328,7 +325,7 @@ export class TelebirrProvider {
         redirect_url: redirectUrl,
       };
 
-      // Add optional payee fields
+      // Add payee fields like v38 working version
       if (this.shortCode) {
         biz.payee_identifier = this.shortCode;
         biz.payee_identifier_type = '04';
@@ -386,15 +383,14 @@ export class TelebirrProvider {
 
     const sign = this.signRequestObject(map);
 
-    // Order by ASCII and create raw request string
-    // No URL encoding per Telebirr documentation
+    // URL encode the sign because base64 contains +, /, = which break URLs
     const rawRequest = [
       `appid=${map.appid}`,
       `merch_code=${map.merch_code}`,
       `nonce_str=${map.nonce_str}`,
       `prepay_id=${map.prepay_id}`,
       `timestamp=${map.timestamp}`,
-      `sign=${sign}`,
+      `sign=${encodeURIComponent(sign)}`,
       `sign_type=SHA256WithRSA`,
     ].join('&');
 
@@ -534,20 +530,12 @@ export class TelebirrProvider {
         formattedKey = `-----BEGIN PUBLIC KEY-----\n${formattedKey}\n-----END PUBLIC KEY-----`;
       }
 
-      // Verify signature using RSA-PSS (SHA256withRSAandMGF1)
+      // Verify signature using RSA-SHA256 with PKCS#1 v1.5 padding
       const verify = crypto.createVerify('RSA-SHA256');
       verify.update(stringToVerify);
       verify.end();
 
-      const isValid = verify.verify(
-        {
-          key: formattedKey,
-          padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
-        },
-        data.sign,
-        'base64'
-      );
+      const isValid = verify.verify(formattedKey, data.sign, 'base64');
 
       if (isValid) {
         console.log('✅ Telebirr callback signature verified successfully');

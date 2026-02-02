@@ -213,7 +213,7 @@ export class PaymentsService {
       title: title,
       notifyUrl: notifyUrl,
       returnUrl: returnUrl,
-      callbackInfo: `Order:${order.id}`,
+      callbackInfo: `Order-${order.id}`,
     });
 
     if (!result.success) {

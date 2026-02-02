@@ -162,10 +162,17 @@ export function EventDetailPage() {
         document.body.appendChild(form);
         form.submit();
       } else {
-        // Fallback to checkout URL redirect
+        // Fallback to checkout URL redirect using anchor element (per Telebirr support)
         const checkoutUrl = paymentResponse.data?.checkout_url;
         if (checkoutUrl) {
-          window.location.href = checkoutUrl;
+          const anchorEle = document.createElement('a');
+          anchorEle.setAttribute('href', checkoutUrl);
+          anchorEle.setAttribute('target', '_blank');
+          anchorEle.setAttribute('rel', 'external');
+          anchorEle.style.display = 'none';
+          document.body.appendChild(anchorEle);
+          anchorEle.click();
+          document.body.removeChild(anchorEle);
         } else {
           setPurchaseError('Payment service temporarily unavailable. Please try again later.');
           setIsPurchasing(false);

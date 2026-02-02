@@ -238,8 +238,16 @@ export function ShopPage() {
           form.submit();
           return;
         } else if (paymentResult.data?.checkout_url) {
-          // Fallback to checkout URL redirect
-          window.location.href = paymentResult.data.checkout_url;
+          // Fallback to checkout URL redirect using anchor element (per Telebirr support)
+          const checkoutUrl = paymentResult.data.checkout_url;
+          const anchorEle = document.createElement('a');
+          anchorEle.setAttribute('href', checkoutUrl);
+          anchorEle.setAttribute('target', '_blank');
+          anchorEle.setAttribute('rel', 'external');
+          anchorEle.style.display = 'none';
+          document.body.appendChild(anchorEle);
+          anchorEle.click();
+          document.body.removeChild(anchorEle);
           return;
         } else {
           setCheckoutError('Payment service temporarily unavailable. Please try again later.');
