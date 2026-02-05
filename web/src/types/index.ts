@@ -159,6 +159,10 @@ export interface TicketType {
   sold: number;
   available: number;
   maxPerOrder: number;
+  // Dynamic pricing fields
+  currentPrice?: number;
+  currentTier?: string;
+  tierEndsAt?: string;
 }
 
 // Ticket types

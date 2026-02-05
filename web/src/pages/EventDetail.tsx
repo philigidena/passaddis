@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Calendar,
@@ -12,6 +12,8 @@ import {
   Ticket,
   ArrowLeft,
   Loader2,
+  Zap,
+  Timer,
 } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/Button';
@@ -88,7 +90,9 @@ export function EventDetailPage() {
 
   const totalTickets = Object.values(ticketSelection).reduce((sum, qty) => sum + qty, 0);
   const totalAmount = event?.ticketTypes.reduce((sum, tt) => {
-    return sum + tt.price * (ticketSelection[tt.id] || 0);
+    // Use currentPrice if available (from dynamic pricing), otherwise use base price
+    const effectivePrice = tt.currentPrice ?? tt.price;
+    return sum + effectivePrice * (ticketSelection[tt.id] || 0);
   }, 0) || 0;
   const serviceFee = Math.round(totalAmount * 0.05);
   const grandTotal = totalAmount + serviceFee;
@@ -401,6 +405,48 @@ export function EventDetailPage() {
   );
 }
 
+// Countdown hook for pricing tier expiry
+function useCountdown(targetDate: string | undefined) {
+  const [timeLeft, setTimeLeft] = useState<{
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!targetDate) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const target = new Date(targetDate).getTime();
+
+    const calculateTimeLeft = () => {
+      const now = Date.now();
+      const diff = target - now;
+
+      if (diff <= 0) {
+        setTimeLeft(null);
+        return;
+      }
+
+      setTimeLeft({
+        days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+        minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+        seconds: Math.floor((diff % (1000 * 60)) / 1000),
+      });
+    };
+
+    calculateTimeLeft();
+    const interval = setInterval(calculateTimeLeft, 1000);
+    return () => clearInterval(interval);
+  }, [targetDate]);
+
+  return timeLeft;
+}
+
 // Ticket Type Row Component
 function TicketTypeRow({
   ticketType,
@@ -419,6 +465,15 @@ function TicketTypeRow({
 }) {
   const isAvailable = ticketType.available > 0;
   const isSoldOut = ticketType.available === 0;
+  const countdown = useCountdown(ticketType.tierEndsAt);
+
+  // Determine effective price and if there's a discount
+  const effectivePrice = ticketType.currentPrice ?? ticketType.price;
+  const hasDiscount = ticketType.currentPrice !== undefined && ticketType.currentPrice < ticketType.price;
+  const discountPercent = hasDiscount
+    ? Math.round((1 - ticketType.currentPrice! / ticketType.price) * 100)
+    : 0;
+  const isEarlyBird = ticketType.currentTier && ticketType.currentTier.toLowerCase() !== 'standard';
 
   return (
     <div
@@ -428,9 +483,37 @@ function TicketTypeRow({
           ? 'bg-primary/5 border-primary/30'
           : waitlistStatus?.joined
           ? 'bg-warning/5 border-warning/30'
+          : isEarlyBird
+          ? 'bg-green-500/5 border-green-500/30'
           : 'bg-white/5 border-white/10 hover:border-white/20'
       )}
     >
+      {/* Early Bird Badge & Countdown */}
+      {isEarlyBird && (
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-green-400" />
+            <span className="text-green-400 text-sm font-medium">
+              {ticketType.currentTier}
+            </span>
+            {hasDiscount && (
+              <span className="bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded-full">
+                Save {discountPercent}%
+              </span>
+            )}
+          </div>
+          {countdown && (
+            <div className="flex items-center gap-1 text-xs text-white/60">
+              <Timer className="w-3 h-3" />
+              <span>
+                {countdown.days > 0 && `${countdown.days}d `}
+                {countdown.hours}h {countdown.minutes}m {countdown.seconds}s
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
           <h3 className="text-white font-medium">{ticketType.name}</h3>
@@ -438,9 +521,16 @@ function TicketTypeRow({
             <p className="text-white/40 text-sm">{ticketType.description}</p>
           )}
         </div>
-        <p className="text-primary font-bold">
-          {ticketType.price === 0 ? 'Free' : `${ticketType.price.toLocaleString()} ETB`}
-        </p>
+        <div className="text-right">
+          {hasDiscount && (
+            <p className="text-white/40 text-sm line-through">
+              {ticketType.price.toLocaleString()} ETB
+            </p>
+          )}
+          <p className={clsx('font-bold', hasDiscount ? 'text-green-400' : 'text-primary')}>
+            {effectivePrice === 0 ? 'Free' : `${effectivePrice.toLocaleString()} ETB`}
+          </p>
+        </div>
       </div>
 
       <div className="flex items-center justify-between">

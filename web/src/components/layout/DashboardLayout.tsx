@@ -278,6 +278,7 @@ export function DashboardButton({
   size = 'md',
   disabled = false,
   className = '',
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -285,6 +286,7 @@ export function DashboardButton({
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   className?: string;
+  title?: string;
 }) {
   const variants = {
     primary: 'bg-primary text-white hover:bg-primary/90',
@@ -304,6 +306,7 @@ export function DashboardButton({
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`
         inline-flex items-center justify-center gap-2 rounded-lg font-medium
         transition-colors disabled:opacity-50 disabled:cursor-not-allowed

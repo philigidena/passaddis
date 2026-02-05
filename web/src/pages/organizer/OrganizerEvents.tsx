@@ -7,6 +7,7 @@ import {
   StatusBadge,
   DashboardButton,
 } from '@/components/layout/DashboardLayout';
+import { PricingTierManager } from '@/components/PricingTierManager';
 import type { Event } from '@/types';
 
 // Icons
@@ -54,6 +55,14 @@ export function OrganizerEvents() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+
+  // Pricing tier manager state
+  const [pricingTierModal, setPricingTierModal] = useState<{
+    eventId: string;
+    ticketTypeId: string;
+    ticketTypeName: string;
+    basePrice: number;
+  } | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -323,12 +332,23 @@ export function OrganizerEvents() {
                     {event.ticketTypes && (
                       <div className="flex flex-wrap gap-2 mb-4">
                         {event.ticketTypes.map((tt: any) => (
-                          <span
-                            key={tt.id}
-                            className="px-3 py-1 text-xs bg-gray-700 rounded-full text-gray-300"
-                          >
-                            {tt.name}: {tt.sold || 0}/{tt.quantity} sold
-                          </span>
+                          <div key={tt.id} className="flex items-center gap-1">
+                            <span className="px-3 py-1 text-xs bg-gray-700 rounded-l-full text-gray-300">
+                              {tt.name}: {tt.sold || 0}/{tt.quantity} sold
+                            </span>
+                            <button
+                              onClick={() => setPricingTierModal({
+                                eventId: event.id,
+                                ticketTypeId: tt.id,
+                                ticketTypeName: tt.name,
+                                basePrice: tt.price,
+                              })}
+                              className="px-2 py-1 text-xs bg-purple-600 hover:bg-purple-500 rounded-r-full text-white transition-colors"
+                              title="Manage Pricing Tiers"
+                            >
+                              Pricing
+                            </button>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -615,6 +635,17 @@ export function OrganizerEvents() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Pricing Tier Manager Modal */}
+      {pricingTierModal && (
+        <PricingTierManager
+          eventId={pricingTierModal.eventId}
+          ticketTypeId={pricingTierModal.ticketTypeId}
+          ticketTypeName={pricingTierModal.ticketTypeName}
+          basePrice={pricingTierModal.basePrice}
+          onClose={() => setPricingTierModal(null)}
+        />
       )}
     </DashboardLayout>
   );
