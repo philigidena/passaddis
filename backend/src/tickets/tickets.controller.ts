@@ -5,6 +5,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { TicketsService } from './tickets.service';
@@ -82,5 +83,28 @@ export class TicketsController {
   @Get('transfer/history')
   async getTransferHistory(@CurrentUser('id') userId: string) {
     return this.ticketsService.getTransferHistory(userId);
+  }
+
+  // ============== WHATSAPP SHARING ENDPOINTS ==============
+
+  @Get(':id/share/whatsapp')
+  async getWhatsAppShareLink(
+    @CurrentUser('id') userId: string,
+    @Param('id') ticketId: string,
+  ) {
+    return this.ticketsService.getTicketWhatsAppShareLink(userId, ticketId);
+  }
+
+  @Get(':id/send/whatsapp')
+  async getWhatsAppSendLink(
+    @CurrentUser('id') userId: string,
+    @Param('id') ticketId: string,
+    @Query('phone') recipientPhone: string,
+  ) {
+    return this.ticketsService.getTicketWhatsAppSendLink(
+      userId,
+      ticketId,
+      recipientPhone,
+    );
   }
 }

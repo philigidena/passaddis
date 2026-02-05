@@ -43,9 +43,24 @@ export class EventsController {
   }
 
   @Public()
+  @Get('support/whatsapp')
+  async getWhatsAppSupport(
+    @Query('subject') subject?: string,
+    @Query('orderId') orderId?: string,
+  ) {
+    return this.eventsService.getWhatsAppSupportLink(subject, orderId);
+  }
+
+  @Public()
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.eventsService.findOne(id);
+  }
+
+  @Public()
+  @Get(':id/share/whatsapp')
+  async getWhatsAppShareLink(@Param('id') id: string) {
+    return this.eventsService.getWhatsAppShareLink(id);
   }
 
   /**

@@ -15,9 +15,11 @@ import { OrganizerModule } from './organizer/organizer.module';
 import { ShopOwnerModule } from './shop-owner/shop-owner.module';
 import { PromoModule } from './promo/promo.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
+import { SharedModule } from './shared/shared.module';
 
 @Module({
   imports: [
+    SharedModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',

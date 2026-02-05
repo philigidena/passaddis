@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AfroSmsProvider } from '../auth/providers/afro-sms.provider';
 import { EmailProvider } from '../auth/providers/email.provider';
+import { WhatsAppProvider } from '../shared/providers/whatsapp.provider';
 import { PurchaseTicketsDto, ValidateTicketDto } from './dto/tickets.dto';
 import {
   InitiateTransferDto,
@@ -35,6 +36,7 @@ export class TicketsService {
     private prisma: PrismaService,
     private smsProvider: AfroSmsProvider,
     private emailProvider: EmailProvider,
+    private whatsAppProvider: WhatsAppProvider,
     private configService: ConfigService,
   ) {
     this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:8081';
@@ -787,5 +789,90 @@ export class TicketsService {
       createdAt: t.createdAt,
       claimedAt: t.claimedAt,
     }));
+  }
+
+  // ============== WHATSAPP SHARING ==============
+
+  // Get WhatsApp share link for a ticket
+  async getTicketWhatsAppShareLink(userId: string, ticketId: string) {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            title: true,
+            date: true,
+            venue: true,
+          },
+        },
+        ticketType: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    if (ticket.userId !== userId) {
+      throw new ForbiddenException('You do not own this ticket');
+    }
+
+    const shareLink = this.whatsAppProvider.generateTicketShareLink(
+      ticket.event.title,
+      ticket.event.date,
+      ticket.ticketType.name,
+    );
+
+    return {
+      ticketId: ticket.id,
+      eventTitle: ticket.event.title,
+      whatsappUrl: shareLink.url,
+      shareMessage: shareLink.message,
+    };
+  }
+
+  // Get WhatsApp link to send ticket details to someone
+  async getTicketWhatsAppSendLink(
+    userId: string,
+    ticketId: string,
+    recipientPhone: string,
+  ) {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        event: {
+          select: {
+            title: true,
+            date: true,
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    if (ticket.userId !== userId) {
+      throw new ForbiddenException('You do not own this ticket');
+    }
+
+    const sendLink = this.whatsAppProvider.generateTicketSendLink(
+      recipientPhone,
+      ticket.event.title,
+      ticket.event.date,
+      ticket.qrCode,
+    );
+
+    return {
+      ticketId: ticket.id,
+      whatsappUrl: sendLink.url,
+      message: sendLink.message,
+    };
   }
 }

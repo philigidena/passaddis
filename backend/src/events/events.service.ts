@@ -4,6 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsAppProvider } from '../shared/providers/whatsapp.provider';
 import {
   CreateEventDto,
   UpdateEventDto,
@@ -12,7 +13,10 @@ import {
 
 @Injectable()
 export class EventsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private whatsAppProvider: WhatsAppProvider,
+  ) {}
 
   // Get all published events with filters
   async findAll(query: EventQueryDto) {
@@ -271,5 +275,42 @@ export class EventsService {
       category: c.category,
       count: c._count,
     }));
+  }
+
+  // Get WhatsApp share link for an event
+  async getWhatsAppShareLink(id: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        venue: true,
+        status: true,
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const shareLink = this.whatsAppProvider.generateEventShareLink(
+      event.title,
+      event.date,
+      event.venue,
+      event.id,
+    );
+
+    return {
+      eventId: event.id,
+      eventTitle: event.title,
+      whatsappUrl: shareLink.url,
+      shareMessage: shareLink.message,
+    };
+  }
+
+  // Get WhatsApp support link
+  async getWhatsAppSupportLink(subject?: string, orderId?: string) {
+    return this.whatsAppProvider.generateSupportLink(subject, orderId);
   }
 }

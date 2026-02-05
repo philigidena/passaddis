@@ -6,8 +6,11 @@ import {
   Delete,
   Param,
   Body,
+  Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { OrganizerService } from './organizer.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -19,6 +22,7 @@ import {
   CreateEventDto,
   UpdateEventDto,
   CreateTicketTypeDto,
+  CloneEventDto,
 } from './dto/organizer.dto';
 
 @Controller('organizer')
@@ -110,6 +114,17 @@ export class OrganizerController {
     @Body() dto: CreateEventDto,
   ) {
     return this.organizerService.createEvent(userId, dto);
+  }
+
+  @Post('events/:id/clone')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async cloneEvent(
+    @CurrentUser('id') userId: string,
+    @Param('id') eventId: string,
+    @Body() dto: CloneEventDto,
+  ) {
+    return this.organizerService.cloneEvent(userId, eventId, dto);
   }
 
   @Patch('events/:id')
@@ -208,5 +223,61 @@ export class OrganizerController {
       eventId,
       ticketTypeId,
     );
+  }
+
+  // ==================== CSV EXPORTS ====================
+
+  @Get('events/:id/attendees/export')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async exportEventAttendees(
+    @CurrentUser('id') userId: string,
+    @Param('id') eventId: string,
+    @Res() res: Response,
+  ) {
+    const csv = await this.organizerService.exportEventAttendeesToCsv(
+      userId,
+      eventId,
+    );
+    const filename = `attendees-${eventId}-${Date.now()}.csv`;
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  }
+
+  @Get('reports/sales/export')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async exportSalesReport(
+    @CurrentUser('id') userId: string,
+    @Query('eventId') eventId: string | undefined,
+    @Query('startDate') startDate: string | undefined,
+    @Query('endDate') endDate: string | undefined,
+    @Res() res: Response,
+  ) {
+    const csv = await this.organizerService.exportSalesReportToCsv(
+      userId,
+      eventId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+    const filename = `sales-report-${Date.now()}.csv`;
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  }
+
+  @Get('wallet/transactions/export')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async exportWalletTransactions(
+    @CurrentUser('id') userId: string,
+    @Res() res: Response,
+  ) {
+    const csv = await this.organizerService.exportWalletTransactionsToCsv(userId);
+    const filename = `wallet-transactions-${Date.now()}.csv`;
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
   }
 }

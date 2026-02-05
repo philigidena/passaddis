@@ -194,6 +194,21 @@ export class UpdateEventDto {
   category?: string;
 }
 
+// Clone Event DTO
+export class CloneEventDto {
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsDateString()
+  date?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+}
+
 // Dashboard stats
 export interface OrganizerDashboardStats {
   events: {

@@ -13,6 +13,7 @@ import {
   UpdateOrganizerProfileDto,
   CreateEventDto,
   UpdateEventDto,
+  CloneEventDto,
 } from './dto/organizer.dto';
 
 @Injectable()
@@ -494,6 +495,63 @@ export class OrganizerService {
     return event;
   }
 
+  async cloneEvent(userId: string, eventId: string, dto: CloneEventDto) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    // Fetch the source event with ticket types
+    const sourceEvent = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: { ticketTypes: true },
+    });
+
+    if (!sourceEvent) {
+      throw new NotFoundException('Event not found');
+    }
+
+    if (sourceEvent.merchantId !== merchant.id) {
+      throw new ForbiddenException('You do not own this event');
+    }
+
+    // Create the cloned event
+    const clonedEvent = await this.prisma.event.create({
+      data: {
+        title: dto.title || `${sourceEvent.title} (Copy)`,
+        description: sourceEvent.description,
+        imageUrl: sourceEvent.imageUrl,
+        venue: sourceEvent.venue,
+        address: sourceEvent.address,
+        city: sourceEvent.city,
+        date: dto.date ? new Date(dto.date) : sourceEvent.date,
+        endDate: dto.endDate
+          ? new Date(dto.endDate)
+          : sourceEvent.endDate,
+        category: sourceEvent.category,
+        status: 'DRAFT',
+        merchantId: merchant.id,
+        ticketTypes: {
+          create: sourceEvent.ticketTypes.map((tt) => ({
+            name: tt.name,
+            description: tt.description,
+            price: tt.price,
+            quantity: tt.quantity,
+            maxPerOrder: tt.maxPerOrder,
+          })),
+        },
+      },
+      include: {
+        ticketTypes: true,
+      },
+    });
+
+    return clonedEvent;
+  }
+
   async updateEvent(userId: string, eventId: string, dto: UpdateEventDto) {
     const merchant = await this.prisma.merchant.findUnique({
       where: { userId },
@@ -966,5 +1024,235 @@ export class OrganizerService {
     return this.prisma.ticketType.delete({
       where: { id: ticketTypeId },
     });
+  }
+
+  // ==================== CSV EXPORTS ====================
+
+  // Export event attendees to CSV
+  async exportEventAttendeesToCsv(userId: string, eventId: string): Promise<string> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    if (event.merchantId !== merchant.id) {
+      throw new ForbiddenException('You do not own this event');
+    }
+
+    const tickets = await this.prisma.ticket.findMany({
+      where: { eventId },
+      include: {
+        user: {
+          select: {
+            name: true,
+            phone: true,
+            email: true,
+          },
+        },
+        ticketType: {
+          select: {
+            name: true,
+            price: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Build CSV content
+    const headers = ['Name', 'Phone', 'Email', 'Ticket Type', 'Price (ETB)', 'Status', 'Check-in Time', 'Purchase Date'];
+    const rows = tickets.map((ticket) => [
+      this.escapeCsvField(ticket.user?.name || 'N/A'),
+      this.escapeCsvField(ticket.user?.phone || 'N/A'),
+      this.escapeCsvField(ticket.user?.email || 'N/A'),
+      this.escapeCsvField(ticket.ticketType?.name || 'N/A'),
+      ticket.ticketType?.price?.toString() || '0',
+      ticket.status,
+      ticket.usedAt ? new Date(ticket.usedAt).toISOString() : '',
+      new Date(ticket.createdAt).toISOString(),
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.join(',')),
+    ].join('\n');
+
+    return csvContent;
+  }
+
+  // Export sales report to CSV
+  async exportSalesReportToCsv(
+    userId: string,
+    eventId?: string,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<string> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    // Build the where clause for events
+    const eventWhere: any = { merchantId: merchant.id };
+    if (eventId) {
+      eventWhere.id = eventId;
+    }
+
+    const events = await this.prisma.event.findMany({
+      where: eventWhere,
+      select: { id: true, title: true },
+    });
+
+    if (eventId && events.length === 0) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const eventIds = events.map((e) => e.id);
+    const eventMap = new Map(events.map((e) => [e.id, e.title]));
+
+    // Build where clause for tickets
+    const ticketWhere: any = {
+      eventId: { in: eventIds },
+    };
+
+    if (startDate || endDate) {
+      ticketWhere.createdAt = {};
+      if (startDate) {
+        ticketWhere.createdAt.gte = startDate;
+      }
+      if (endDate) {
+        ticketWhere.createdAt.lte = endDate;
+      }
+    }
+
+    const tickets = await this.prisma.ticket.findMany({
+      where: ticketWhere,
+      include: {
+        ticketType: {
+          select: {
+            name: true,
+            price: true,
+          },
+        },
+        order: {
+          select: {
+            orderNumber: true,
+            status: true,
+            serviceFee: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Build CSV content
+    const headers = [
+      'Event',
+      'Order Number',
+      'Ticket Type',
+      'Price (ETB)',
+      'Service Fee (ETB)',
+      'Order Status',
+      'Ticket Status',
+      'Sale Date',
+    ];
+
+    const rows = tickets.map((ticket) => [
+      this.escapeCsvField(eventMap.get(ticket.eventId) || 'Unknown'),
+      this.escapeCsvField(ticket.order?.orderNumber || 'N/A'),
+      this.escapeCsvField(ticket.ticketType?.name || 'N/A'),
+      ticket.ticketType?.price?.toString() || '0',
+      ticket.order?.serviceFee?.toString() || '0',
+      ticket.order?.status || 'N/A',
+      ticket.status,
+      new Date(ticket.createdAt).toISOString(),
+    ]);
+
+    // Calculate summary
+    const totalSales = tickets.reduce((sum, t) => sum + (t.ticketType?.price || 0), 0);
+    const totalFees = tickets.reduce((sum, t) => sum + (t.order?.serviceFee || 0), 0);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.join(',')),
+      '',
+      `Total Tickets,${tickets.length}`,
+      `Total Sales (ETB),${totalSales}`,
+      `Total Service Fees (ETB),${totalFees}`,
+    ].join('\n');
+
+    return csvContent;
+  }
+
+  // Export wallet transactions to CSV
+  async exportWalletTransactionsToCsv(userId: string): Promise<string> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    const transactions = await this.prisma.walletTransaction.findMany({
+      where: { merchantId: merchant.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const headers = [
+      'Date',
+      'Type',
+      'Amount (ETB)',
+      'Fee (ETB)',
+      'Net Amount (ETB)',
+      'Balance Before (ETB)',
+      'Balance After (ETB)',
+      'Description',
+      'Status',
+    ];
+
+    const rows = transactions.map((tx) => [
+      new Date(tx.createdAt).toISOString(),
+      tx.type,
+      tx.amount.toString(),
+      tx.fee?.toString() || '0',
+      tx.netAmount.toString(),
+      tx.balanceBefore?.toString() || '0',
+      tx.balanceAfter?.toString() || '0',
+      this.escapeCsvField(tx.description || ''),
+      tx.status,
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.join(',')),
+    ].join('\n');
+
+    return csvContent;
+  }
+
+  // Helper to escape CSV fields
+  private escapeCsvField(field: string): string {
+    if (!field) return '';
+    // If field contains comma, newline, or quote, wrap in quotes and escape quotes
+    if (field.includes(',') || field.includes('\n') || field.includes('"')) {
+      return `"${field.replace(/"/g, '""')}"`;
+    }
+    return field;
   }
 }

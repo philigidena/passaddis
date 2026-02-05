@@ -184,6 +184,23 @@ export function OrganizerWallet() {
     });
   };
 
+  const handleExportTransactions = async () => {
+    try {
+      const response = await organizerApi.exportWalletTransactions();
+      const blob = new Blob([response.data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wallet-transactions-${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Failed to export transactions:', error);
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <DashboardLayout title="Organizer Portal" navItems={navItems} accentColor="purple">
@@ -268,27 +285,37 @@ export function OrganizerWallet() {
       )}
 
       {/* Tabs */}
-      <div className="flex space-x-4 mb-6">
-        <button
-          onClick={() => setActiveTab('transactions')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'transactions'
-              ? 'bg-purple-500 text-white'
-              : 'bg-gray-800 text-gray-400 hover:text-white'
-          }`}
-        >
-          Transaction History
-        </button>
-        <button
-          onClick={() => setActiveTab('settlements')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'settlements'
-              ? 'bg-purple-500 text-white'
-              : 'bg-gray-800 text-gray-400 hover:text-white'
-          }`}
-        >
-          Settlements
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="flex space-x-4">
+          <button
+            onClick={() => setActiveTab('transactions')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'transactions'
+                ? 'bg-purple-500 text-white'
+                : 'bg-gray-800 text-gray-400 hover:text-white'
+            }`}
+          >
+            Transaction History
+          </button>
+          <button
+            onClick={() => setActiveTab('settlements')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'settlements'
+                ? 'bg-purple-500 text-white'
+                : 'bg-gray-800 text-gray-400 hover:text-white'
+            }`}
+          >
+            Settlements
+          </button>
+        </div>
+        {activeTab === 'transactions' && transactions.length > 0 && (
+          <DashboardButton onClick={handleExportTransactions} variant="secondary" size="sm">
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Export CSV
+          </DashboardButton>
+        )}
       </div>
 
       {/* Content */}

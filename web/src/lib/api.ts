@@ -601,6 +601,38 @@ export const organizerApi = {
 
   deleteTicketType: (eventId: string, ticketTypeId: string) =>
     handleResponse<void>(api.delete(`/organizer/events/${eventId}/ticket-types/${ticketTypeId}`)),
+
+  // Event Cloning
+  cloneEvent: (eventId: string, data?: { title?: string; date?: string; endDate?: string }) =>
+    handleResponse<Event>(api.post(`/organizer/events/${eventId}/clone`, data || {})),
+
+  // CSV Exports
+  exportAttendees: (eventId: string) =>
+    api.get(`/organizer/events/${eventId}/attendees/export`, { responseType: 'blob' }),
+
+  exportSalesReport: (params?: { eventId?: string; startDate?: string; endDate?: string }) =>
+    api.get('/organizer/reports/sales/export', { params, responseType: 'blob' }),
+
+  exportWalletTransactions: () =>
+    api.get('/organizer/wallet/transactions/export', { responseType: 'blob' }),
+};
+
+// ============== WHATSAPP API ==============
+export const whatsappApi = {
+  getEventShareLink: (eventId: string) =>
+    handleResponse<{ eventId: string; eventTitle: string; whatsappUrl: string; shareMessage: string }>(
+      api.get(`/events/${eventId}/share/whatsapp`)
+    ),
+
+  getSupportLink: (subject?: string, orderId?: string) =>
+    handleResponse<{ url: string; message: string }>(
+      api.get('/events/support/whatsapp', { params: { subject, orderId } })
+    ),
+
+  getTicketShareLink: (ticketId: string) =>
+    handleResponse<{ ticketId: string; eventTitle: string; whatsappUrl: string; shareMessage: string }>(
+      api.get(`/tickets/${ticketId}/share/whatsapp`)
+    ),
 };
 
 // ============== SHOP OWNER API ==============
