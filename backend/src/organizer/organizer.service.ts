@@ -14,6 +14,8 @@ import {
   CreateEventDto,
   UpdateEventDto,
   CloneEventDto,
+  CreatePricingTierDto,
+  UpdatePricingTierDto,
 } from './dto/organizer.dto';
 
 @Injectable()
@@ -1024,6 +1026,211 @@ export class OrganizerService {
     return this.prisma.ticketType.delete({
       where: { id: ticketTypeId },
     });
+  }
+
+  // ==================== PRICING TIERS (Early Bird, etc.) ====================
+
+  async getPricingTiers(userId: string, eventId: string, ticketTypeId: string) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event || event.merchantId !== merchant.id) {
+      throw new ForbiddenException('Event not found or access denied');
+    }
+
+    const ticketType = await this.prisma.ticketType.findUnique({
+      where: { id: ticketTypeId },
+      include: { pricingTiers: { orderBy: { priority: 'desc' } } },
+    });
+
+    if (!ticketType || ticketType.eventId !== eventId) {
+      throw new NotFoundException('Ticket type not found');
+    }
+
+    return {
+      ticketType: {
+        id: ticketType.id,
+        name: ticketType.name,
+        basePrice: ticketType.price,
+        sold: ticketType.sold,
+      },
+      pricingTiers: ticketType.pricingTiers,
+    };
+  }
+
+  async addPricingTier(
+    userId: string,
+    eventId: string,
+    ticketTypeId: string,
+    dto: CreatePricingTierDto,
+  ) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event || event.merchantId !== merchant.id) {
+      throw new ForbiddenException('Event not found or access denied');
+    }
+
+    const ticketType = await this.prisma.ticketType.findUnique({
+      where: { id: ticketTypeId },
+    });
+
+    if (!ticketType || ticketType.eventId !== eventId) {
+      throw new NotFoundException('Ticket type not found');
+    }
+
+    return this.prisma.pricingTier.create({
+      data: {
+        name: dto.name,
+        price: dto.price,
+        startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
+        maxQuantity: dto.maxQuantity,
+        priority: dto.priority || 0,
+        ticketTypeId,
+      },
+    });
+  }
+
+  async updatePricingTier(
+    userId: string,
+    eventId: string,
+    ticketTypeId: string,
+    tierId: string,
+    dto: UpdatePricingTierDto,
+  ) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event || event.merchantId !== merchant.id) {
+      throw new ForbiddenException('Event not found or access denied');
+    }
+
+    const tier = await this.prisma.pricingTier.findUnique({
+      where: { id: tierId },
+      include: { ticketType: true },
+    });
+
+    if (!tier || tier.ticketTypeId !== ticketTypeId) {
+      throw new NotFoundException('Pricing tier not found');
+    }
+
+    return this.prisma.pricingTier.update({
+      where: { id: tierId },
+      data: {
+        name: dto.name,
+        price: dto.price,
+        startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
+        maxQuantity: dto.maxQuantity,
+        priority: dto.priority,
+        isActive: dto.isActive,
+      },
+    });
+  }
+
+  async deletePricingTier(
+    userId: string,
+    eventId: string,
+    ticketTypeId: string,
+    tierId: string,
+  ) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { userId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException('Organizer profile not found');
+    }
+
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event || event.merchantId !== merchant.id) {
+      throw new ForbiddenException('Event not found or access denied');
+    }
+
+    const tier = await this.prisma.pricingTier.findUnique({
+      where: { id: tierId },
+    });
+
+    if (!tier || tier.ticketTypeId !== ticketTypeId) {
+      throw new NotFoundException('Pricing tier not found');
+    }
+
+    return this.prisma.pricingTier.delete({
+      where: { id: tierId },
+    });
+  }
+
+  // Get the current effective price for a ticket type based on active pricing tiers
+  async getCurrentPrice(ticketTypeId: string): Promise<{ price: number; tierName: string; tierEndsAt?: Date }> {
+    const ticketType = await this.prisma.ticketType.findUnique({
+      where: { id: ticketTypeId },
+      include: {
+        pricingTiers: {
+          where: { isActive: true },
+          orderBy: { priority: 'desc' },
+        },
+      },
+    });
+
+    if (!ticketType) {
+      throw new NotFoundException('Ticket type not found');
+    }
+
+    const now = new Date();
+
+    // Check each tier in priority order
+    for (const tier of ticketType.pricingTiers) {
+      // Check date constraints
+      if (tier.startsAt && now < tier.startsAt) continue;
+      if (tier.endsAt && now > tier.endsAt) continue;
+
+      // Check quantity constraints
+      if (tier.maxQuantity && ticketType.sold >= tier.maxQuantity) continue;
+
+      // This tier is active
+      return {
+        price: tier.price,
+        tierName: tier.name,
+        tierEndsAt: tier.endsAt || undefined,
+      };
+    }
+
+    // Fallback to base price
+    return {
+      price: ticketType.price,
+      tierName: 'Standard',
+    };
   }
 
   // ==================== CSV EXPORTS ====================

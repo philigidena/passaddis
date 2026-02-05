@@ -209,6 +209,64 @@ export class CloneEventDto {
   endDate?: string;
 }
 
+// Pricing Tier DTOs (Early Bird, etc.)
+export class CreatePricingTierDto {
+  @IsString()
+  name: string;  // "Early Bird", "Regular", "Last Minute"
+
+  @IsNumber()
+  @Min(0)
+  price: number;
+
+  @IsOptional()
+  @IsDateString()
+  startsAt?: string;  // When this tier becomes active
+
+  @IsOptional()
+  @IsDateString()
+  endsAt?: string;  // When this tier ends
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  maxQuantity?: number;  // First X tickets at this price
+
+  @IsOptional()
+  @IsNumber()
+  priority?: number;  // Higher = checked first
+}
+
+export class UpdatePricingTierDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  price?: number;
+
+  @IsOptional()
+  @IsDateString()
+  startsAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endsAt?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  maxQuantity?: number;
+
+  @IsOptional()
+  @IsNumber()
+  priority?: number;
+
+  @IsOptional()
+  isActive?: boolean;
+}
+
 // Dashboard stats
 export interface OrganizerDashboardStats {
   events: {

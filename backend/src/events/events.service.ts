@@ -163,7 +163,14 @@ export class EventsService {
             description: true,
           },
         },
-        ticketTypes: true,
+        ticketTypes: {
+          include: {
+            pricingTiers: {
+              where: { isActive: true },
+              orderBy: { priority: 'desc' },
+            },
+          },
+        },
       },
     });
 
@@ -171,18 +178,99 @@ export class EventsService {
       throw new NotFoundException('Event not found');
     }
 
-    return {
-      ...event,
-      ticketTypes: event.ticketTypes.map((t) => ({
+    // Calculate current prices for each ticket type
+    const ticketTypesWithPricing = event.ticketTypes.map((t) => {
+      const currentPricing = this.getCurrentPriceForTicketType(t);
+      return {
         ...t,
         available: t.quantity - t.sold,
-      })),
-      minPrice: Math.min(...event.ticketTypes.map((t) => t.price)),
-      maxPrice: Math.max(...event.ticketTypes.map((t) => t.price)),
+        currentPrice: currentPricing.price,
+        currentTier: currentPricing.tierName,
+        tierEndsAt: currentPricing.tierEndsAt,
+        hasEarlyBird: t.pricingTiers.length > 0,
+      };
+    });
+
+    const currentPrices = ticketTypesWithPricing.map((t) => t.currentPrice);
+
+    return {
+      ...event,
+      ticketTypes: ticketTypesWithPricing,
+      minPrice: Math.min(...currentPrices),
+      maxPrice: Math.max(...currentPrices),
       ticketsAvailable: event.ticketTypes.reduce(
         (sum, t) => sum + (t.quantity - t.sold),
         0,
       ),
+    };
+  }
+
+  // Helper to calculate current price for a ticket type with pricing tiers
+  private getCurrentPriceForTicketType(ticketType: any): {
+    price: number;
+    tierName: string;
+    tierEndsAt?: Date;
+  } {
+    const now = new Date();
+
+    // Check each tier in priority order (already sorted)
+    for (const tier of ticketType.pricingTiers || []) {
+      // Check date constraints
+      if (tier.startsAt && now < new Date(tier.startsAt)) continue;
+      if (tier.endsAt && now > new Date(tier.endsAt)) continue;
+
+      // Check quantity constraints
+      if (tier.maxQuantity && ticketType.sold >= tier.maxQuantity) continue;
+
+      // This tier is active
+      return {
+        price: tier.price,
+        tierName: tier.name,
+        tierEndsAt: tier.endsAt || undefined,
+      };
+    }
+
+    // Fallback to base price
+    return {
+      price: ticketType.price,
+      tierName: 'Standard',
+    };
+  }
+
+  // Get current price for a specific ticket type (public endpoint)
+  async getTicketTypePrice(ticketTypeId: string) {
+    const ticketType = await this.prisma.ticketType.findUnique({
+      where: { id: ticketTypeId },
+      include: {
+        pricingTiers: {
+          where: { isActive: true },
+          orderBy: { priority: 'desc' },
+        },
+        event: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!ticketType) {
+      throw new NotFoundException('Ticket type not found');
+    }
+
+    const pricing = this.getCurrentPriceForTicketType(ticketType);
+
+    return {
+      ticketTypeId: ticketType.id,
+      ticketTypeName: ticketType.name,
+      basePrice: ticketType.price,
+      currentPrice: pricing.price,
+      currentTier: pricing.tierName,
+      tierEndsAt: pricing.tierEndsAt,
+      available: ticketType.quantity - ticketType.sold,
+      event: ticketType.event,
     };
   }
 

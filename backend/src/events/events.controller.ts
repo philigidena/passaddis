@@ -63,6 +63,12 @@ export class EventsController {
     return this.eventsService.getWhatsAppShareLink(id);
   }
 
+  @Public()
+  @Get('ticket-types/:ticketTypeId/price')
+  async getTicketTypePrice(@Param('ticketTypeId') ticketTypeId: string) {
+    return this.eventsService.getTicketTypePrice(ticketTypeId);
+  }
+
   /**
    * Create a new event
    * Only ORGANIZER and ADMIN roles can create events

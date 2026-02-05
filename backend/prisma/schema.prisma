@@ -397,7 +397,7 @@ model TicketType {
   id          String   @id @default(uuid())
   name        String
   description String?
-  price       Float
+  price       Float    // Base price (fallback)
   quantity    Int
   sold        Int      @default(0)
   maxPerOrder Int      @default(10)
@@ -407,8 +407,35 @@ model TicketType {
   event       Event    @relation(fields: [eventId], references: [id])
   eventId     String
   tickets     Ticket[]
+  pricingTiers PricingTier[]
 
   @@map("ticket_types")
+}
+
+// ============== PRICING TIERS (Early Bird, etc.) ==============
+
+model PricingTier {
+  id            String   @id @default(uuid())
+  name          String   // "Early Bird", "Regular", "Last Minute"
+  price         Float
+
+  // Activation rules (one or both)
+  startsAt      DateTime?  // When this tier becomes active
+  endsAt        DateTime?  // When this tier ends
+  maxQuantity   Int?       // First X tickets at this price
+
+  isActive      Boolean  @default(true)
+  priority      Int      @default(0)  // Higher = checked first
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ticketType    TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+  ticketTypeId  String
+
+  @@index([ticketTypeId])
+  @@index([ticketTypeId, isActive])
+  @@map("pricing_tiers")
 }
 
 model Ticket {

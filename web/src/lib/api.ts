@@ -259,6 +259,17 @@ export const eventsApi = {
 
   getById: (id: string) => handleResponse<Event>(api.get(`/events/${id}`)),
 
+  getTicketTypePrice: (ticketTypeId: string) =>
+    handleResponse<{
+      ticketTypeId: string;
+      ticketTypeName: string;
+      basePrice: number;
+      currentPrice: number;
+      currentTier: string;
+      tierEndsAt?: string;
+      available: number;
+    }>(api.get(`/events/ticket-types/${ticketTypeId}/price`)),
+
   create: (data: Partial<Event>) => handleResponse<Event>(api.post('/events', data)),
 
   update: (id: string, data: Partial<Event>) =>
@@ -605,6 +616,46 @@ export const organizerApi = {
   // Event Cloning
   cloneEvent: (eventId: string, data?: { title?: string; date?: string; endDate?: string }) =>
     handleResponse<Event>(api.post(`/organizer/events/${eventId}/clone`, data || {})),
+
+  // Pricing Tiers (Early Bird, etc.)
+  getPricingTiers: (eventId: string, ticketTypeId: string) =>
+    handleResponse<{
+      ticketType: { id: string; name: string; basePrice: number; sold: number };
+      pricingTiers: Array<{
+        id: string;
+        name: string;
+        price: number;
+        startsAt: string | null;
+        endsAt: string | null;
+        maxQuantity: number | null;
+        isActive: boolean;
+        priority: number;
+      }>;
+    }>(api.get(`/organizer/events/${eventId}/ticket-types/${ticketTypeId}/pricing-tiers`)),
+
+  addPricingTier: (eventId: string, ticketTypeId: string, data: {
+    name: string;
+    price: number;
+    startsAt?: string;
+    endsAt?: string;
+    maxQuantity?: number;
+    priority?: number;
+  }) =>
+    handleResponse<any>(api.post(`/organizer/events/${eventId}/ticket-types/${ticketTypeId}/pricing-tiers`, data)),
+
+  updatePricingTier: (eventId: string, ticketTypeId: string, tierId: string, data: Partial<{
+    name: string;
+    price: number;
+    startsAt: string;
+    endsAt: string;
+    maxQuantity: number;
+    priority: number;
+    isActive: boolean;
+  }>) =>
+    handleResponse<any>(api.patch(`/organizer/events/${eventId}/ticket-types/${ticketTypeId}/pricing-tiers/${tierId}`, data)),
+
+  deletePricingTier: (eventId: string, ticketTypeId: string, tierId: string) =>
+    handleResponse<void>(api.delete(`/organizer/events/${eventId}/ticket-types/${ticketTypeId}/pricing-tiers/${tierId}`)),
 
   // CSV Exports
   exportAttendees: (eventId: string) =>

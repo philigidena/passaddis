@@ -23,6 +23,8 @@ import {
   UpdateEventDto,
   CreateTicketTypeDto,
   CloneEventDto,
+  CreatePricingTierDto,
+  UpdatePricingTierDto,
 } from './dto/organizer.dto';
 
 @Controller('organizer')
@@ -222,6 +224,72 @@ export class OrganizerController {
       userId,
       eventId,
       ticketTypeId,
+    );
+  }
+
+  // ==================== PRICING TIERS (Early Bird, etc.) ====================
+
+  @Get('events/:eventId/ticket-types/:ticketTypeId/pricing-tiers')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async getPricingTiers(
+    @CurrentUser('id') userId: string,
+    @Param('eventId') eventId: string,
+    @Param('ticketTypeId') ticketTypeId: string,
+  ) {
+    return this.organizerService.getPricingTiers(userId, eventId, ticketTypeId);
+  }
+
+  @Post('events/:eventId/ticket-types/:ticketTypeId/pricing-tiers')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async addPricingTier(
+    @CurrentUser('id') userId: string,
+    @Param('eventId') eventId: string,
+    @Param('ticketTypeId') ticketTypeId: string,
+    @Body() dto: CreatePricingTierDto,
+  ) {
+    return this.organizerService.addPricingTier(
+      userId,
+      eventId,
+      ticketTypeId,
+      dto,
+    );
+  }
+
+  @Patch('events/:eventId/ticket-types/:ticketTypeId/pricing-tiers/:tierId')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async updatePricingTier(
+    @CurrentUser('id') userId: string,
+    @Param('eventId') eventId: string,
+    @Param('ticketTypeId') ticketTypeId: string,
+    @Param('tierId') tierId: string,
+    @Body() dto: UpdatePricingTierDto,
+  ) {
+    return this.organizerService.updatePricingTier(
+      userId,
+      eventId,
+      ticketTypeId,
+      tierId,
+      dto,
+    );
+  }
+
+  @Delete('events/:eventId/ticket-types/:ticketTypeId/pricing-tiers/:tierId')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async deletePricingTier(
+    @CurrentUser('id') userId: string,
+    @Param('eventId') eventId: string,
+    @Param('ticketTypeId') ticketTypeId: string,
+    @Param('tierId') tierId: string,
+  ) {
+    return this.organizerService.deletePricingTier(
+      userId,
+      eventId,
+      ticketTypeId,
+      tierId,
     );
   }
 
