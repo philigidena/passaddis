@@ -1,8 +1,8 @@
 import zipfile
 import os
 
-zip_path = 'deploy-v65.zip'
-source_dir = 'deploy-v65'
+zip_path = 'deploy-v68.zip'
+source_dir = 'deploy-v68'
 
 # Files that should have Unix line endings (LF)
 text_extensions = {'.js', '.json', '.ts', '.md', '.txt', ''}

@@ -123,8 +123,8 @@ export class TelebirrProvider {
   }
 
   /**
-   * Create timestamp - milliseconds (13 digits)
-   * Per Telebirr docs: string(13) and working v38 used Date.now()
+   * Create timestamp - MILLISECONDS (13 digits)
+   * v40 used this format and it worked with checkout
    */
   private createTimestamp(): string {
     return Date.now().toString();
@@ -132,21 +132,25 @@ export class TelebirrProvider {
 
   /**
    * Create nonce string (32 char lowercase hex)
-   * Working v38 used: crypto.randomBytes(16).toString('hex')
+   * v40 used this format and it worked with checkout
    */
   private createNonceStr(): string {
     return crypto.randomBytes(16).toString('hex');
   }
 
   /**
-   * Sign request object with private key using SHA256WithRSA (PKCS#1 v1.5)
+   * Sign request object with private key using SHA256withRSAandMGF1 (RSA-PSS)
    *
-   * According to Telebirr docs:
+   * Per Telebirr demo code (tools.js):
+   * - Algorithm: "SHA256withRSAandMGF1" which is RSA-PSS with MGF1
+   * - This is NOT standard RSA-SHA256 (PKCS#1 v1.5)
+   *
+   * Signature process:
    * 1. Exclude sign, sign_type, biz_content (as object) fields
    * 2. Flatten biz_content fields into the main map
    * 3. Sort all fields alphabetically (A-Z)
    * 4. Join as key=value pairs with &
-   * 5. Sign with RSA-SHA256 (PKCS#1 v1.5 padding)
+   * 5. Sign with RSA-PSS (SHA256withRSAandMGF1)
    */
   private signRequestObject(requestObj: any): string {
     try {
@@ -179,7 +183,7 @@ export class TelebirrProvider {
         formattedKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----`;
       }
 
-      // Sign with RSA-SHA256 using RSA-PSS padding (as in working v38)
+      // Sign with RSA-PSS (SHA256withRSAandMGF1) per Telebirr demo code
       const sign = crypto.createSign('RSA-SHA256');
       sign.update(stringToSign);
       sign.end();
@@ -383,7 +387,8 @@ export class TelebirrProvider {
 
     const sign = this.signRequestObject(map);
 
-    // URL encode ALL parameters (matching v39 which worked)
+    // URL-encode values to safely handle base64 signature characters (+, /, =)
+    // Without encoding, + in base64 is decoded as space in URL query strings
     const rawRequest = [
       `appid=${encodeURIComponent(map.appid)}`,
       `merch_code=${encodeURIComponent(map.merch_code)}`,
@@ -530,12 +535,20 @@ export class TelebirrProvider {
         formattedKey = `-----BEGIN PUBLIC KEY-----\n${formattedKey}\n-----END PUBLIC KEY-----`;
       }
 
-      // Verify signature using RSA-SHA256 with PKCS#1 v1.5 padding
+      // Verify signature using RSA-PSS (SHA256withRSAandMGF1) matching the signing algorithm
       const verify = crypto.createVerify('RSA-SHA256');
       verify.update(stringToVerify);
       verify.end();
 
-      const isValid = verify.verify(formattedKey, data.sign, 'base64');
+      const isValid = verify.verify(
+        {
+          key: formattedKey,
+          padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+        },
+        data.sign,
+        'base64'
+      );
 
       if (isValid) {
         console.log('✅ Telebirr callback signature verified successfully');

@@ -136,51 +136,22 @@ export function EventDetailPage() {
         return;
       }
 
-      // Use Telebirr startPay POST method
-      const rawRequest = paymentResponse.data?.raw_request;
-      const webBaseUrl = paymentResponse.data?.web_base_url;
-
-      if (rawRequest && webBaseUrl) {
-        // Parse rawRequest parameters and create POST form
-        const params = new URLSearchParams(rawRequest);
-
-        // Add version and trade_type
-        params.set('version', '1.0');
-        params.set('trade_type', 'Checkout');
-
-        // Create form and submit via POST
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = webBaseUrl;
-        form.style.display = 'none';
-
-        // Add all parameters as hidden inputs
-        params.forEach((value, key) => {
-          const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = key;
-          input.value = value;
-          form.appendChild(input);
-        });
-
-        document.body.appendChild(form);
-        form.submit();
+      // Open Telebirr checkout URL via GET (the approach that worked in v38-v40)
+      // Note: POST form approach was broken because URLSearchParams corrupts
+      // base64 signature characters (+ decoded as space)
+      const checkoutUrl = paymentResponse.data?.checkout_url;
+      if (checkoutUrl) {
+        const anchorEle = document.createElement('a');
+        anchorEle.setAttribute('href', checkoutUrl.trim());
+        anchorEle.setAttribute('target', '_blank');
+        anchorEle.setAttribute('rel', 'external');
+        anchorEle.style.display = 'none';
+        document.body.appendChild(anchorEle);
+        anchorEle.click();
+        document.body.removeChild(anchorEle);
       } else {
-        // Fallback to checkout URL redirect using anchor element (per Telebirr support)
-        const checkoutUrl = paymentResponse.data?.checkout_url;
-        if (checkoutUrl) {
-          const anchorEle = document.createElement('a');
-          anchorEle.setAttribute('href', checkoutUrl.trim());
-          anchorEle.setAttribute('target', '_blank');
-          anchorEle.setAttribute('rel', 'external');
-          anchorEle.style.display = 'none';
-          document.body.appendChild(anchorEle);
-          anchorEle.click();
-          document.body.removeChild(anchorEle);
-        } else {
-          setPurchaseError('Payment service temporarily unavailable. Please try again later.');
-          setIsPurchasing(false);
-        }
+        setPurchaseError('Payment service temporarily unavailable. Please try again later.');
+        setIsPurchasing(false);
       }
     } catch (err) {
       console.error('Purchase error:', err);
