@@ -387,15 +387,14 @@ export class TelebirrProvider {
 
     const sign = this.signRequestObject(map);
 
-    // URL-encode values to safely handle base64 signature characters (+, /, =)
-    // Without encoding, + in base64 is decoded as space in URL query strings
+    // Match v38/v40 (working) and Telebirr docs: raw values without URL encoding
     const rawRequest = [
-      `appid=${encodeURIComponent(map.appid)}`,
-      `merch_code=${encodeURIComponent(map.merch_code)}`,
-      `nonce_str=${encodeURIComponent(map.nonce_str)}`,
-      `prepay_id=${encodeURIComponent(map.prepay_id)}`,
-      `timestamp=${encodeURIComponent(map.timestamp)}`,
-      `sign=${encodeURIComponent(sign)}`,
+      `appid=${map.appid}`,
+      `merch_code=${map.merch_code}`,
+      `nonce_str=${map.nonce_str}`,
+      `prepay_id=${map.prepay_id}`,
+      `timestamp=${map.timestamp}`,
+      `sign=${sign}`,
       `sign_type=SHA256WithRSA`,
     ].join('&');
 
