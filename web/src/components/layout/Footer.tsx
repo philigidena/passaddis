@@ -128,6 +128,9 @@ export function Footer() {
           <p className="text-white/40 text-sm">
             &copy; {new Date().getFullYear()} PassAddis. All rights reserved.
           </p>
+          <p className="text-white/40 text-sm">
+            Powered by Philocom
+          </p>
           <div className="flex items-center gap-2 text-white/40 text-sm">
             <MapPin className="w-4 h-4" />
             <span>Addis Ababa, Ethiopia</span>

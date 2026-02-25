@@ -40,8 +40,8 @@ export function ContactPage() {
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-2">Phone</h3>
-                    <a href="tel:+251911234567" className="text-primary hover:underline">
-                      +251 911 234 567
+                    <a href="tel:+251947447244" className="text-primary hover:underline">
+                      +251 947 447 244
                     </a>
                     <p className="text-white/60 text-sm mt-2">
                       Available Mon-Fri, 9AM-6PM EAT
