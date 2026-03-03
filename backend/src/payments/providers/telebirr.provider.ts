@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import * as https from 'https';
@@ -77,6 +77,7 @@ export interface TelebirrRefundResponse {
  */
 @Injectable()
 export class TelebirrProvider {
+  private readonly logger = new Logger(TelebirrProvider.name);
   private readonly merchantAppId: string;
   private readonly fabricAppId: string;
   private readonly appSecret: string;
@@ -110,8 +111,8 @@ export class TelebirrProvider {
 
     // Note: Use domain name for checkout URL (same as v39/v40 which worked)
 
-    console.log('📱 Telebirr configured with API base:', this.baseUrl);
-    console.log('📱 Telebirr web checkout base:', this.webBaseUrl);
+    this.logger.log(`[CONFIG] API base: ${this.baseUrl}`);
+    this.logger.log(`[CONFIG] Web checkout base: ${this.webBaseUrl}`);
   }
 
   /**
@@ -123,8 +124,8 @@ export class TelebirrProvider {
   }
 
   /**
-   * Create timestamp - MILLISECONDS (13 digits)
-   * v40 used this format and it worked with checkout
+   * Create timestamp - milliseconds (13 digits)
+   * Per Telebirr docs: string(13) and working v38 used Date.now()
    */
   private createTimestamp(): string {
     return Date.now().toString();
@@ -132,25 +133,21 @@ export class TelebirrProvider {
 
   /**
    * Create nonce string (32 char lowercase hex)
-   * v40 used this format and it worked with checkout
+   * Working v38 used: crypto.randomBytes(16).toString('hex')
    */
   private createNonceStr(): string {
     return crypto.randomBytes(16).toString('hex');
   }
 
   /**
-   * Sign request object with private key using SHA256withRSAandMGF1 (RSA-PSS)
+   * Sign request object with private key using SHA256WithRSA (PKCS#1 v1.5)
    *
-   * Per Telebirr demo code (tools.js):
-   * - Algorithm: "SHA256withRSAandMGF1" which is RSA-PSS with MGF1
-   * - This is NOT standard RSA-SHA256 (PKCS#1 v1.5)
-   *
-   * Signature process:
+   * According to Telebirr docs:
    * 1. Exclude sign, sign_type, biz_content (as object) fields
    * 2. Flatten biz_content fields into the main map
    * 3. Sort all fields alphabetically (A-Z)
    * 4. Join as key=value pairs with &
-   * 5. Sign with RSA-PSS (SHA256withRSAandMGF1)
+   * 5. Sign with RSA-SHA256 (PKCS#1 v1.5 padding)
    */
   private signRequestObject(requestObj: any): string {
     try {
@@ -175,7 +172,7 @@ export class TelebirrProvider {
       const sortedKeys = Object.keys(fieldMap).sort();
       const stringToSign = sortedKeys.map(key => `${key}=${fieldMap[key]}`).join('&');
 
-      console.log('📱 String to sign:', stringToSign);
+      this.logger.debug(`[SIGN] String to sign: ${stringToSign}`);
 
       // Format private key
       let formattedKey = this.privateKey;
@@ -183,7 +180,7 @@ export class TelebirrProvider {
         formattedKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----`;
       }
 
-      // Sign with RSA-PSS (SHA256withRSAandMGF1) per Telebirr demo code
+      // Sign with RSA-SHA256 using RSA-PSS padding (as in working v38)
       const sign = crypto.createSign('RSA-SHA256');
       sign.update(stringToSign);
       sign.end();
@@ -193,7 +190,7 @@ export class TelebirrProvider {
         saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
       }, 'base64');
     } catch (error) {
-      console.error('❌ Signing error:', error);
+      this.logger.error('[SIGN] Signing error:', error);
       throw error;
     }
   }
@@ -214,7 +211,7 @@ export class TelebirrProvider {
         timeout: 30000, // 30 second timeout
       };
 
-      console.log(`📱 Making request to: ${url}`);
+      this.logger.log(`[HTTP] POST ${url}`);
 
       const req = https.request(reqOptions, (res) => {
         let data = '';
@@ -224,7 +221,7 @@ export class TelebirrProvider {
             const result = JSON.parse(data);
             resolve(result);
           } catch (e) {
-            console.error('❌ Failed to parse response:', data);
+            this.logger.error(`[HTTP] Failed to parse response: ${data}`);
             reject(new Error('Invalid JSON response: ' + data));
           }
         });
@@ -233,12 +230,12 @@ export class TelebirrProvider {
       // Handle timeout
       req.on('timeout', () => {
         req.destroy();
-        console.error('❌ Request timeout after 30s');
+        this.logger.error('[HTTP] Request timeout after 30s');
         reject(new Error('Connection to Telebirr API timed out. The API may be unreachable from this server location.'));
       });
 
       req.on('error', (error: any) => {
-        console.error('❌ Request error:', error.message);
+        this.logger.error(`[HTTP] Request error: ${error.message}`);
         if (error.code === 'ECONNREFUSED') {
           reject(new Error('Connection refused by Telebirr API. Please check network/firewall settings.'));
         } else if (error.code === 'ENOTFOUND') {
@@ -263,9 +260,9 @@ export class TelebirrProvider {
   private async applyFabricToken(): Promise<{ token: string } | { error: string }> {
     try {
       const url = `${this.baseUrl}/payment/v1/token`;
-      console.log('📱 Applying for Fabric Token at:', url);
-      console.log('📱 Using X-APP-Key:', this.fabricAppId);
-      console.log('📱 Using appSecret:', this.appSecret ? `${this.appSecret.substring(0, 8)}...` : 'NOT SET');
+      this.logger.log(`[TOKEN] Applying for Fabric Token at: ${url}`);
+      this.logger.log(`[TOKEN] X-APP-Key: ${this.fabricAppId}`);
+      this.logger.log(`[TOKEN] appSecret: ${this.appSecret ? `${this.appSecret.substring(0, 8)}...` : 'NOT SET'}`);
 
       const result = await this.makeRequest(url, {
         method: 'POST',
@@ -277,7 +274,7 @@ export class TelebirrProvider {
         appSecret: this.appSecret,
       });
 
-      console.log('📱 Fabric Token Response:', JSON.stringify(result, null, 2));
+      this.logger.log(`[TOKEN] Response: ${JSON.stringify(result)}`);
 
       if (result.token) {
         return { token: result.token };
@@ -285,10 +282,10 @@ export class TelebirrProvider {
 
       // Return actual error from Telebirr
       const errorMsg = result.errorMsg || result.msg || result.message || JSON.stringify(result);
-      console.error('❌ Failed to get fabric token:', errorMsg);
+      this.logger.error(`[TOKEN] Failed to get fabric token: ${errorMsg}`);
       return { error: `Telebirr token error: ${errorMsg}` };
     } catch (error) {
-      console.error('❌ Fabric token error:', error);
+      this.logger.error('[TOKEN] Fabric token error:', error);
       return { error: error instanceof Error ? error.message : 'Connection failed' };
     }
   }
@@ -336,11 +333,15 @@ export class TelebirrProvider {
         biz.payee_type = '5000';
       }
 
+      if (callbackInfo) {
+        biz.callback_info = callbackInfo;
+      }
+
       req.biz_content = biz;
       req.sign = this.signRequestObject(req);
       req.sign_type = 'SHA256WithRSA';
 
-      console.log('📱 PreOrder Request:', JSON.stringify(req, null, 2));
+      this.logger.log(`[PREORDER] Request: ${JSON.stringify(req)}`);
 
       const url = `${this.baseUrl}/payment/v1/merchant/preOrder`;
       const result = await this.makeRequest(url, {
@@ -352,7 +353,7 @@ export class TelebirrProvider {
         },
       }, req);
 
-      console.log('📱 PreOrder Response:', JSON.stringify(result, null, 2));
+      this.logger.log(`[PREORDER] Response: ${JSON.stringify(result)}`);
 
       if (result.biz_content?.prepay_id) {
         return {
@@ -365,10 +366,10 @@ export class TelebirrProvider {
       const errorMsg = result.msg || result.errorMsg || result.message ||
         result.biz_content?.msg || result.biz_content?.error ||
         JSON.stringify(result);
-      console.error('❌ PreOrder failed:', errorMsg);
+      this.logger.error(`[PREORDER] Failed: ${errorMsg}`);
       return { error: `Telebirr PreOrder error: ${errorMsg}` };
     } catch (error) {
-      console.error('❌ PreOrder error:', error);
+      this.logger.error('[PREORDER] Error:', error);
       return { error: error instanceof Error ? error.message : 'PreOrder request failed' };
     }
   }
@@ -387,14 +388,14 @@ export class TelebirrProvider {
 
     const sign = this.signRequestObject(map);
 
-    // Match v38/v40 (working) and Telebirr docs: raw values without URL encoding
+    // URL encode ALL parameters (matching v39 which worked)
     const rawRequest = [
-      `appid=${map.appid}`,
-      `merch_code=${map.merch_code}`,
-      `nonce_str=${map.nonce_str}`,
-      `prepay_id=${map.prepay_id}`,
-      `timestamp=${map.timestamp}`,
-      `sign=${sign}`,
+      `appid=${encodeURIComponent(map.appid)}`,
+      `merch_code=${encodeURIComponent(map.merch_code)}`,
+      `nonce_str=${encodeURIComponent(map.nonce_str)}`,
+      `prepay_id=${encodeURIComponent(map.prepay_id)}`,
+      `timestamp=${encodeURIComponent(map.timestamp)}`,
+      `sign=${encodeURIComponent(sign)}`,
       `sign_type=SHA256WithRSA`,
     ].join('&');
 
@@ -414,15 +415,11 @@ export class TelebirrProvider {
   async initiatePayment(
     request: TelebirrPaymentRequest,
   ): Promise<TelebirrPaymentResponse> {
-    console.log('📱 Telebirr Payment Request:', {
-      orderId: request.orderId,
-      amount: request.amount,
-      title: request.title,
-    });
+    this.logger.log(`[INITIATE] orderId=${request.orderId} amount=${request.amount} title=${request.title}`);
 
     // Check if configured
     if (!this.isConfigured()) {
-      console.error('❌ Telebirr not configured');
+      this.logger.error('[INITIATE] Telebirr not configured');
       return {
         success: false,
         error: 'Telebirr payment not configured. Please set environment variables.',
@@ -431,7 +428,7 @@ export class TelebirrProvider {
 
     try {
       // Step 1: Get Fabric Token
-      console.log('📱 Step 1: Getting Fabric Token...');
+      this.logger.log('[INITIATE] Step 1: Getting Fabric Token...');
       const tokenResult = await this.applyFabricToken();
       if ('error' in tokenResult) {
         return {
@@ -442,7 +439,7 @@ export class TelebirrProvider {
       const fabricToken = tokenResult.token;
 
       // Step 2: Create PreOrder
-      console.log('📱 Step 2: Creating PreOrder...');
+      this.logger.log('[INITIATE] Step 2: Creating PreOrder...');
       const orderResult = await this.createPreOrder(
         fabricToken,
         request.title,
@@ -460,12 +457,12 @@ export class TelebirrProvider {
       }
 
       // Step 3: Create Raw Request for checkout
-      console.log('📱 Step 3: Creating Raw Request...');
+      this.logger.log('[INITIATE] Step 3: Creating Raw Request...');
       const rawRequest = this.createRawRequest(orderResult.prepayId);
 
       // Step 4: Build full checkout URL
       const checkoutUrl = this.buildCheckoutUrl(rawRequest);
-      console.log('📱 Checkout URL:', checkoutUrl);
+      this.logger.log(`[INITIATE] Step 4: Checkout URL ready (prepayId=${orderResult.prepayId})`);
 
       return {
         success: true,
@@ -475,7 +472,7 @@ export class TelebirrProvider {
         outTradeNo: orderResult.outTradeNo,
       };
     } catch (error) {
-      console.error('❌ Telebirr payment error:', error);
+      this.logger.error('[INITIATE] Payment error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Payment service unavailable',
@@ -493,18 +490,18 @@ export class TelebirrProvider {
    * 4. Verify signature using Telebirr's public key with SHA256WithRSA
    */
   async verifyCallback(data: TelebirrCallbackData): Promise<boolean> {
-    console.log('📱 Telebirr Callback Data:', JSON.stringify(data, null, 2));
+    this.logger.log(`[VERIFY_CB] Callback data: ${JSON.stringify(data)}`);
 
     // If no signature provided, reject the callback (security)
     if (!data.sign) {
-      console.error('❌ No signature in callback - rejecting for security');
+      this.logger.error('[VERIFY_CB] No signature in callback - rejecting for security');
       return false;
     }
 
     // If no public key configured, log warning but allow (for backward compatibility during setup)
     if (!this.publicKey) {
-      console.warn('⚠️ TELEBIRR_PUBLIC_KEY not configured - signature verification skipped');
-      console.warn('⚠️ This is a SECURITY RISK - please configure TELEBIRR_PUBLIC_KEY');
+      this.logger.warn('[VERIFY_CB] TELEBIRR_PUBLIC_KEY not configured - signature verification skipped');
+      this.logger.warn('[VERIFY_CB] This is a SECURITY RISK - please configure TELEBIRR_PUBLIC_KEY');
       return true;
     }
 
@@ -526,7 +523,7 @@ export class TelebirrProvider {
       const sortedKeys = Object.keys(fieldMap).sort();
       const stringToVerify = sortedKeys.map(key => `${key}=${fieldMap[key]}`).join('&');
 
-      console.log('📱 String to verify:', stringToVerify);
+      this.logger.debug(`[VERIFY_CB] String to verify: ${stringToVerify}`);
 
       // Format public key
       let formattedKey = this.publicKey;
@@ -534,30 +531,22 @@ export class TelebirrProvider {
         formattedKey = `-----BEGIN PUBLIC KEY-----\n${formattedKey}\n-----END PUBLIC KEY-----`;
       }
 
-      // Verify signature using RSA-PSS (SHA256withRSAandMGF1) matching the signing algorithm
+      // Verify signature using RSA-SHA256 with PKCS#1 v1.5 padding
       const verify = crypto.createVerify('RSA-SHA256');
       verify.update(stringToVerify);
       verify.end();
 
-      const isValid = verify.verify(
-        {
-          key: formattedKey,
-          padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
-        },
-        data.sign,
-        'base64'
-      );
+      const isValid = verify.verify(formattedKey, data.sign, 'base64');
 
       if (isValid) {
-        console.log('✅ Telebirr callback signature verified successfully');
+        this.logger.log('[VERIFY_CB] Signature verified successfully');
       } else {
-        console.error('❌ Telebirr callback signature verification FAILED');
+        this.logger.error('[VERIFY_CB] Signature verification FAILED');
       }
 
       return isValid;
     } catch (error) {
-      console.error('❌ Callback verification error:', error);
+      this.logger.error('[VERIFY_CB] Verification error:', error);
       return false;
     }
   }
@@ -566,7 +555,7 @@ export class TelebirrProvider {
    * Query payment status
    */
   async queryPaymentStatus(outTradeNo: string): Promise<any> {
-    console.log('📱 Querying payment status for:', outTradeNo);
+    this.logger.log(`[QUERY] Querying payment status for: ${outTradeNo}`);
 
     if (!this.isConfigured()) {
       return { success: false, status: 'UNKNOWN', message: 'Not configured' };
@@ -606,14 +595,14 @@ export class TelebirrProvider {
         },
       }, req);
 
-      console.log('📱 Query Response:', JSON.stringify(result, null, 2));
+      this.logger.log(`[QUERY] Response: ${JSON.stringify(result)}`);
 
       return {
         success: true,
         ...result,
       };
     } catch (error) {
-      console.error('❌ Query error:', error);
+      this.logger.error('[QUERY] Error:', error);
       return { success: false, status: 'UNKNOWN', message: 'Query failed' };
     }
   }
@@ -623,11 +612,7 @@ export class TelebirrProvider {
    * Process a refund for a previously successful payment
    */
   async refundPayment(request: TelebirrRefundRequest): Promise<TelebirrRefundResponse> {
-    console.log('📱 Telebirr Refund Request:', {
-      orderId: request.orderId,
-      transactionId: request.transactionId,
-      amount: request.amount,
-    });
+    this.logger.log(`[REFUND] orderId=${request.orderId} transactionId=${request.transactionId} amount=${request.amount}`);
 
     if (!this.isConfigured()) {
       return {
@@ -669,7 +654,7 @@ export class TelebirrProvider {
       req.sign = this.signRequestObject(req);
       req.sign_type = 'SHA256WithRSA';
 
-      console.log('📱 Refund Request:', JSON.stringify(req, null, 2));
+      this.logger.log(`[REFUND] Request: ${JSON.stringify(req)}`);
 
       const url = `${this.baseUrl}/payment/v1/merchant/refund`;
       const result = await this.makeRequest(url, {
@@ -681,7 +666,7 @@ export class TelebirrProvider {
         },
       }, req);
 
-      console.log('📱 Refund Response:', JSON.stringify(result, null, 2));
+      this.logger.log(`[REFUND] Response: ${JSON.stringify(result)}`);
 
       if (result.result === 'SUCCESS' && result.code === '0') {
         return {
@@ -697,7 +682,7 @@ export class TelebirrProvider {
         refundStatus: result.biz_content?.refund_status,
       };
     } catch (error) {
-      console.error('❌ Refund error:', error);
+      this.logger.error('[REFUND] Error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Refund service unavailable',

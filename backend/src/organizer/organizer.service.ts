@@ -391,15 +391,19 @@ export class OrganizerService {
   // ==================== EVENT MANAGEMENT ====================
 
   async getMyEvents(userId: string) {
+    console.log('[getMyEvents] Looking up merchant for userId:', userId);
+
     const merchant = await this.prisma.merchant.findUnique({
       where: { userId },
     });
+
+    console.log('[getMyEvents] Found merchant:', merchant ? { id: merchant.id, businessName: merchant.businessName } : null);
 
     if (!merchant) {
       throw new NotFoundException('Organizer profile not found');
     }
 
-    return this.prisma.event.findMany({
+    const events = await this.prisma.event.findMany({
       where: { merchantId: merchant.id },
       include: {
         ticketTypes: {
@@ -419,6 +423,10 @@ export class OrganizerService {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    console.log('[getMyEvents] Found', events.length, 'events for merchant:', merchant.id);
+
+    return events;
   }
 
   async getEvent(userId: string, eventId: string) {
