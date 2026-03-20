@@ -808,7 +808,7 @@ export const whatsappApi = {
       api.get('/events/support/whatsapp', { params: { subject, orderId } })
     ),
 
-  getGiftShareLink: (recipientPhone: string, eventTitle: string, ticketCount: number, giftMessage?: string) =>
+  getGiftShareLink: (_recipientPhone: string, eventTitle: string, ticketCount: number, _giftMessage?: string) =>
     handleResponse<{ url: string; message: string }>(
       api.get('/events/support/whatsapp', { params: { subject: `Gift: ${ticketCount} tickets for ${eventTitle}` } })
     ),

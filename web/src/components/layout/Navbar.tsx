@@ -18,7 +18,7 @@ export function Navbar() {
   const currencyRef = useRef<HTMLDivElement>(null);
   const { user, isAuthenticated, logout } = useAuth();
   const { currency, setCurrency, currencies } = useCurrency();
-  const { locale, setLocale, locales, t } = useLocale();
+  const { locale, setLocale } = useLocale();
   const {
     notifications,
     unreadCount,

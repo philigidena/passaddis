@@ -1,15 +1,5 @@
-import { useState, useEffect, useCallback, createContext, useContext } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { currencyApi } from '@/lib/api';
-
-interface CurrencyContextType {
-  currency: string;
-  symbol: string;
-  setCurrency: (code: string) => void;
-  convertFromETB: (amountETB: number) => number;
-  formatPrice: (amountETB: number) => string;
-  currencies: Array<{ code: string; symbol: string; name: string }>;
-  isLoading: boolean;
-}
 
 const CURRENCY_KEY = 'passaddis_currency';
 
