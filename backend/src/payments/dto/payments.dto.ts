@@ -4,6 +4,9 @@ export enum PaymentMethod {
   TELEBIRR = 'TELEBIRR',     // Primary: Direct Telebirr integration
   CBE_BIRR = 'CBE_BIRR',     // Future: Direct integration
   BANK_TRANSFER = 'BANK_TRANSFER',
+  STRIPE = 'STRIPE',         // International card payments (Visa/MC/Amex)
+  PAYPAL = 'PAYPAL',         // Future: International alternative
+  CHAPA = 'CHAPA',           // Ethiopian unified gateway
 }
 
 export class InitiatePaymentDto {

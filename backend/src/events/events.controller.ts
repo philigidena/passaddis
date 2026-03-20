@@ -6,8 +6,10 @@ import {
   Param,
   Body,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { EventsService } from './events.service';
 import {
   CreateEventDto,
@@ -43,6 +45,25 @@ export class EventsController {
   }
 
   @Public()
+  @Get('diaspora/picks')
+  async getDiasporaPicks(@Query('limit') limit?: string) {
+    return this.eventsService.getDiasporaPicks(
+      limit ? parseInt(limit, 10) : 8,
+    );
+  }
+
+  @Get('recommendations')
+  async getRecommendations(
+    @CurrentUser('id') userId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.eventsService.getRecommendations(
+      userId,
+      limit ? parseInt(limit, 10) : 8,
+    );
+  }
+
+  @Public()
   @Get('support/whatsapp')
   async getWhatsAppSupport(
     @Query('subject') subject?: string,
@@ -55,6 +76,21 @@ export class EventsController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.eventsService.findOne(id);
+  }
+
+  @Public()
+  @Get(':id/calendar')
+  async getCalendarLinks(@Param('id') id: string) {
+    return this.eventsService.getCalendarLinks(id);
+  }
+
+  @Public()
+  @Get(':id/calendar/ics')
+  async downloadIcs(@Param('id') id: string, @Res() res: Response) {
+    const { filename, content } = await this.eventsService.generateIcsFile(id);
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(content);
   }
 
   @Public()

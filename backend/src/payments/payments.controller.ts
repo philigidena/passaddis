@@ -4,12 +4,15 @@ import {
   Post,
   Body,
   Param,
+  Query,
   UseGuards,
+  Req,
   Res,
+  Headers,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { PaymentsService } from './payments.service';
 import {
   InitiatePaymentDto,
@@ -115,6 +118,60 @@ export class PaymentsController {
         msg: result.message || 'Processing failed',
       });
     }
+  }
+
+  /**
+   * Stripe webhook callback
+   * Called by Stripe after checkout session completion
+   */
+  @Public()
+  @Post('callback/stripe')
+  async stripeCallback(
+    @Body() body: any,
+    @Headers('stripe-signature') signature: string,
+    @Res() res: Response,
+  ) {
+    this.logger.log('[STRIPE_CALLBACK] Webhook received');
+    try {
+      const result = await this.paymentsService.handleStripeWebhook(body, signature);
+      this.logger.log(`[STRIPE_CALLBACK] Result: success=${result.success}`);
+      return res.status(200).json({ received: true });
+    } catch (err) {
+      this.logger.error(`[STRIPE_CALLBACK] Error: ${err?.message}`);
+      return res.status(400).json({ error: err?.message });
+    }
+  }
+
+  /**
+   * Chapa webhook callback
+   */
+  @Public()
+  @Post('callback/chapa')
+  async chapaCallback(
+    @Body() body: any,
+    @Headers('x-chapa-signature') signature: string,
+    @Res() res: Response,
+  ) {
+    this.logger.log('[CHAPA_CALLBACK] Webhook received');
+    try {
+      const result = await this.paymentsService.handleChapaCallback(body, signature);
+      this.logger.log(`[CHAPA_CALLBACK] Result: success=${result.success}`);
+      return res.status(200).json(result);
+    } catch (err) {
+      this.logger.error(`[CHAPA_CALLBACK] Error: ${err?.message}`);
+      return res.status(400).json({ error: err?.message });
+    }
+  }
+
+  /**
+   * Verify Stripe payment (polling endpoint for after redirect)
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('verify-stripe/:sessionId')
+  async verifyStripePayment(
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.paymentsService.verifyStripeSession(sessionId);
   }
 
   /**

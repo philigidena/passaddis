@@ -40,6 +40,7 @@ import { CareersPage } from '@/pages/Careers';
 import { TermsPage } from '@/pages/Terms';
 import { PrivacyPage } from '@/pages/Privacy';
 import { RefundPage } from '@/pages/Refund';
+import { WalletPage } from '@/pages/Wallet';
 import type { ReactNode } from 'react';
 
 const queryClient = new QueryClient({
@@ -108,6 +109,15 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <TicketDetailPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/wallet"
+        element={
+          <ProtectedRoute>
+            <WalletPage />
           </ProtectedRoute>
         }
       />

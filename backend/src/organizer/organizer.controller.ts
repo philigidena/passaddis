@@ -348,4 +348,140 @@ export class OrganizerController {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(csv);
   }
+
+  // ============== ATTENDEE MESSAGING ==============
+
+  @Post('events/:id/messages')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async sendMessage(
+    @CurrentUser('organizerId') organizerId: string,
+    @Param('id') eventId: string,
+    @Body() body: { subject: string; body: string; channel?: string },
+  ) {
+    return this.organizerService.sendMessageToAttendees(
+      organizerId,
+      eventId,
+      body.subject,
+      body.body,
+      body.channel,
+    );
+  }
+
+  @Get('events/:id/messages')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async getMessages(
+    @CurrentUser('organizerId') organizerId: string,
+    @Param('id') eventId: string,
+  ) {
+    return this.organizerService.getEventMessages(organizerId, eventId);
+  }
+
+  // ============== RECURRING EVENTS ==============
+
+  @Post('events/:id/recurring')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async createRecurringEvents(
+    @CurrentUser('organizerId') organizerId: string,
+    @Param('id') eventId: string,
+    @Body() body: { recurrenceRule: string; count?: number },
+  ) {
+    return this.organizerService.createRecurringEvents(
+      organizerId,
+      eventId,
+      body.recurrenceRule,
+      body.count,
+    );
+  }
+
+  // ============== EVENT SESSIONS ==============
+
+  @Get('events/:id/sessions')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async getEventSessions(@Param('id') eventId: string) {
+    return this.organizerService.getEventSessions(eventId);
+  }
+
+  @Post('events/:id/sessions')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async addEventSession(
+    @CurrentUser('organizerId') organizerId: string,
+    @Param('id') eventId: string,
+    @Body() body: { title: string; date: string; endDate?: string; venue?: string; capacity?: number; description?: string },
+  ) {
+    return this.organizerService.addEventSession(organizerId, eventId, body);
+  }
+
+  @Patch('sessions/:sessionId')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async updateEventSession(
+    @CurrentUser('organizerId') organizerId: string,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { title?: string; date?: string; endDate?: string; venue?: string; capacity?: number; description?: string },
+  ) {
+    return this.organizerService.updateEventSession(organizerId, sessionId, body);
+  }
+
+  @Delete('sessions/:sessionId')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async deleteEventSession(
+    @CurrentUser('organizerId') organizerId: string,
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.organizerService.deleteEventSession(organizerId, sessionId);
+  }
+
+  // ============== PRESALE CODES ==============
+
+  @Post('events/:id/presale-codes')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async createPresaleCodes(
+    @CurrentUser('organizerId') organizerId: string,
+    @Param('id') eventId: string,
+    @Body() body: { codes: { code: string; maxUses: number; validFrom: string; validUntil: string }[] },
+  ) {
+    return this.organizerService.createPresaleCodes(organizerId, eventId, body.codes);
+  }
+
+  @Get('events/:id/presale-codes/validate')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async validatePresaleCode(
+    @Param('id') eventId: string,
+    @Query('code') code: string,
+  ) {
+    return this.organizerService.validatePresaleCode(eventId, code);
+  }
+
+  // ============== LIVE CHECK-IN ==============
+
+  @Get('events/:id/checkin-stats')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async getCheckInStats(
+    @CurrentUser('organizerId') organizerId: string,
+    @Param('id') eventId: string,
+  ) {
+    return this.organizerService.getCheckInStats(organizerId, eventId);
+  }
+
+  // ============== FEE ABSORPTION ==============
+
+  @Patch('events/:id/fee-absorption')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async toggleFeeAbsorption(
+    @CurrentUser('organizerId') organizerId: string,
+    @Param('id') eventId: string,
+    @Body() body: { absorb: boolean },
+  ) {
+    return this.organizerService.toggleFeeAbsorption(organizerId, eventId, body.absorb);
+  }
 }

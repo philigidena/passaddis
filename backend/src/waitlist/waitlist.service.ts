@@ -204,6 +204,92 @@ export class WaitlistService {
     };
   }
 
+  // Auto-upgrade: Called when tickets become available (refund/cancellation)
+  // Notifies the next users in FIFO order with a direct purchase link
+  async autoUpgradeWaitlist(eventId: string, ticketTypeId?: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        ticketTypes: true,
+      },
+    });
+
+    if (!event || event.status !== 'PUBLISHED') {
+      return { upgraded: 0 };
+    }
+
+    // Calculate available tickets
+    const relevantTypes = ticketTypeId
+      ? event.ticketTypes.filter((t) => t.id === ticketTypeId)
+      : event.ticketTypes;
+
+    const totalAvailable = relevantTypes.reduce(
+      (sum, t) => sum + (t.quantity - t.sold),
+      0,
+    );
+
+    if (totalAvailable <= 0) {
+      return { upgraded: 0 };
+    }
+
+    // Get waitlist entries (FIFO) matching the ticket type if specified
+    const whereClause: any = {
+      eventId,
+      notified: false,
+    };
+    if (ticketTypeId) {
+      whereClause.OR = [
+        { ticketTypeId },
+        { ticketTypeId: null }, // Users who didn't specify a type
+      ];
+    }
+
+    const waitlistEntries = await this.prisma.waitlist.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'asc' },
+      take: totalAvailable,
+    });
+
+    if (waitlistEntries.length === 0) {
+      return { upgraded: 0 };
+    }
+
+    // Mark as notified
+    await this.prisma.waitlist.updateMany({
+      where: {
+        id: { in: waitlistEntries.map((e) => e.id) },
+      },
+      data: {
+        notified: true,
+        notifiedAt: new Date(),
+      },
+    });
+
+    // Send SMS with purchase link
+    const smsPromises = waitlistEntries
+      .filter((entry) => entry.phone)
+      .map(async (entry) => {
+        try {
+          const message = `Great news! Tickets are now available for "${event.title}". You were on the waitlist and have priority access. Book now before they sell out!`;
+          await this.smsProvider.sendSms(entry.phone!, message);
+          return { success: true };
+        } catch (error) {
+          console.error(`Failed to send waitlist upgrade SMS to ${entry.phone}:`, error);
+          return { success: false };
+        }
+      });
+
+    const results = await Promise.allSettled(smsPromises);
+    const sent = results.filter(
+      (r) => r.status === 'fulfilled' && r.value.success,
+    ).length;
+
+    return {
+      upgraded: waitlistEntries.length,
+      smsSent: sent,
+    };
+  }
+
   // Internal: Notify waitlist when tickets become available
   async notifyWaitlist(eventId: string, availableTickets: number) {
     // Get event details

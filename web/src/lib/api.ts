@@ -247,6 +247,9 @@ export const eventsApi = {
 
   getFeatured: () => handleResponse<Event[]>(api.get('/events/featured')),
 
+  getDiasporaPicks: (limit?: number) =>
+    handleResponse<Event[]>(api.get('/events/diaspora/picks', { params: { limit } })),
+
   getCategories: async (): Promise<ApiResponse<string[]>> => {
     const response = await handleResponse<{ category: string; count: number }[]>(
       api.get('/events/categories')
@@ -276,13 +279,27 @@ export const eventsApi = {
     handleResponse<Event>(api.patch(`/events/${id}`, data)),
 
   getMyEvents: () => handleResponse<Event[]>(api.get('/events/organizer/my-events')),
+
+  getCalendarLinks: (id: string) =>
+    handleResponse<{
+      eventId: string;
+      eventTitle: string;
+      googleCalendarUrl: string;
+      outlookUrl: string;
+      yahooUrl: string;
+      icsUrl: string;
+    }>(api.get(`/events/${id}/calendar`)),
 };
 
 // ============== TICKETS API ==============
 export const ticketsApi = {
-  purchase: (eventId: string, tickets: { ticketTypeId: string; quantity: number }[]) =>
+  purchase: (
+    eventId: string,
+    tickets: { ticketTypeId: string; quantity: number }[],
+    gift?: { isGift: boolean; recipientPhone: string; recipientName?: string; giftMessage?: string },
+  ) =>
     handleResponse<{ order: Order; tickets: Ticket[]; paymentRequired: number }>(
-      api.post('/tickets/purchase', { eventId, tickets })
+      api.post('/tickets/purchase', { eventId, tickets, ...gift })
     ),
 
   getMyTickets: () => handleResponse<Ticket[]>(api.get('/tickets/my-tickets')),
@@ -668,6 +685,117 @@ export const organizerApi = {
     api.get('/organizer/wallet/transactions/export', { responseType: 'blob' }),
 };
 
+// ============== USER WALLET API ==============
+export const walletApi = {
+  get: (params?: { page?: number; limit?: number }) =>
+    handleResponse<{
+      balance: number;
+      transactions: Array<{
+        id: string;
+        type: string;
+        amount: number;
+        currency: string;
+        description: string;
+        senderName: string | null;
+        createdAt: string;
+      }>;
+      meta: { total: number; page: number; limit: number; totalPages: number };
+    }>(api.get('/wallet', { params })),
+
+  getBalance: () =>
+    handleResponse<{ balance: number }>(api.get('/wallet/balance')),
+
+  sendGift: (recipientPhone: string, amount: number, message?: string) =>
+    handleResponse<{ success: boolean; message: string; recipientPhone: string; amount: number }>(
+      api.post('/wallet/send-gift', { recipientPhone, amount, message }),
+    ),
+
+  topUp: (amount: number, currency?: string, paymentMethod?: string) =>
+    handleResponse<{
+      success: boolean;
+      checkoutUrl: string;
+      sessionId: string;
+      amount: number;
+      currency: string;
+      amountETB: number;
+      exchangeRate?: number;
+      reference: string;
+    }>(
+      api.post('/wallet/top-up', { amount, currency, paymentMethod }),
+    ),
+};
+
+// ============== CURRENCY API ==============
+export const currencyApi = {
+  getRates: () =>
+    handleResponse<{ base: string; rates: Record<string, number>; updatedAt: string }>(
+      api.get('/currency/rates'),
+    ),
+
+  getSupportedCurrencies: () =>
+    handleResponse<Array<{ code: string; symbol: string; name: string }>>(
+      api.get('/currency/supported'),
+    ),
+
+  convert: (amount: number, from: string, to: string) =>
+    handleResponse<{ from: string; to: string; originalAmount: number; convertedAmount: number }>(
+      api.get('/currency/convert', { params: { amount, from, to } }),
+    ),
+
+  getPrices: (amountETB: number) =>
+    handleResponse<Record<string, { amount: number; symbol: string; formatted: string }>>(
+      api.get('/currency/prices', { params: { amount: amountETB } }),
+    ),
+};
+
+// ============== NOTIFICATIONS API ==============
+export const notificationsApi = {
+  getAll: (params?: { page?: number; limit?: number }) =>
+    handleResponse<{
+      data: Array<{
+        id: string;
+        type: string;
+        title: string;
+        message: string;
+        data: any;
+        isRead: boolean;
+        readAt: string | null;
+        createdAt: string;
+      }>;
+      unreadCount: number;
+      meta: { total: number; page: number; limit: number; totalPages: number };
+    }>(api.get('/notifications', { params })),
+
+  getUnreadCount: () =>
+    handleResponse<{ unreadCount: number }>(api.get('/notifications/unread-count')),
+
+  markAsRead: (id: string) =>
+    handleResponse<{ message: string }>(api.patch(`/notifications/${id}/read`)),
+
+  markAllAsRead: () =>
+    handleResponse<{ message: string }>(api.patch('/notifications/read-all')),
+
+  delete: (id: string) =>
+    handleResponse<{ message: string }>(api.delete(`/notifications/${id}`)),
+};
+
+// ============== SAVED EVENTS API ==============
+export const savedEventsApi = {
+  getAll: () => handleResponse<Event[]>(api.get('/saved-events')),
+
+  getIds: () =>
+    handleResponse<{ eventIds: string[] }>(api.get('/saved-events/ids')),
+
+  check: (eventId: string) =>
+    handleResponse<{ saved: boolean }>(api.get(`/saved-events/${eventId}/check`)),
+
+  save: (eventId: string) =>
+    handleResponse<{ saved: boolean; message: string }>(api.post(`/saved-events/${eventId}`)),
+
+  unsave: (eventId: string) =>
+    handleResponse<{ saved: boolean; message: string }>(api.delete(`/saved-events/${eventId}`)),
+};
+
 // ============== WHATSAPP API ==============
 export const whatsappApi = {
   getEventShareLink: (eventId: string) =>
@@ -678,6 +806,11 @@ export const whatsappApi = {
   getSupportLink: (subject?: string, orderId?: string) =>
     handleResponse<{ url: string; message: string }>(
       api.get('/events/support/whatsapp', { params: { subject, orderId } })
+    ),
+
+  getGiftShareLink: (recipientPhone: string, eventTitle: string, ticketCount: number, giftMessage?: string) =>
+    handleResponse<{ url: string; message: string }>(
+      api.get('/events/support/whatsapp', { params: { subject: `Gift: ${ticketCount} tickets for ${eventTitle}` } })
     ),
 
   getTicketShareLink: (ticketId: string) =>

@@ -23,6 +23,9 @@ model User {
   emailVerificationToken String?
   emailVerificationExpiresAt DateTime?
   role          UserRole  @default(USER)
+  country       String?           // Auto-detected or user-set (ISO 3166)
+  preferredCurrency String?       // Preferred display currency
+  isDiaspora    Boolean   @default(false)
   failedLoginAttempts Int @default(0)
   lockedUntil   DateTime?
   resetToken    String?
@@ -38,6 +41,13 @@ model User {
   otpCodes      OtpCode[]
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
+  notifications Notification[]
+  savedEvents   SavedEvent[]
+  wallet        UserWallet?
+  followedOrganizers OrganizerFollow[]
+  referrals     Referral[]          @relation("ReferrerUser")
+  eventRatings  EventRating[]
+  donations     Donation[]
 
   @@map("users")
 }
@@ -171,6 +181,101 @@ model Waitlist {
   @@unique([eventId, userId])
   @@index([eventId])
   @@map("waitlists")
+}
+
+// ============== USER WALLET (Gift Balance) ==============
+
+model UserWallet {
+  id        String   @id @default(uuid())
+  balance   Float    @default(0)    // Current balance in ETB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @unique
+
+  transactions UserWalletTransaction[]
+
+  @@map("user_wallets")
+}
+
+model UserWalletTransaction {
+  id            String                    @id @default(uuid())
+  type          UserWalletTransactionType
+  amount        Float                     // Amount in ETB
+  currency      String                    @default("ETB")  // Original currency
+  originalAmount Float?                   // Amount in original currency
+  exchangeRate  Float?                    // Rate used for conversion
+  description   String
+  reference     String?                   // Order ID, sender user ID, etc.
+  senderName    String?                   // Name of person who sent the funds
+  createdAt     DateTime                  @default(now())
+
+  wallet        UserWallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  walletId      String
+
+  @@index([walletId, createdAt])
+  @@map("user_wallet_transactions")
+}
+
+enum UserWalletTransactionType {
+  TOP_UP         // Loaded by diaspora user
+  GIFT_RECEIVED  // Received from another user
+  GIFT_SENT      // Sent to another user
+  PURCHASE       // Spent on tickets/shop
+  REFUND         // Refunded from order
+}
+
+// ============== NOTIFICATIONS ==============
+
+model Notification {
+  id        String             @id @default(uuid())
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?              // Extra data (eventId, orderId, etc.)
+  isRead    Boolean            @default(false)
+  readAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  TICKET_PURCHASED
+  TICKET_TRANSFERRED
+  TICKET_RECEIVED
+  ORDER_CONFIRMED
+  ORDER_READY
+  ORDER_CANCELLED
+  REFUND_PROCESSED
+  EVENT_REMINDER
+  EVENT_CANCELLED
+  WAITLIST_AVAILABLE
+  PROMO_AVAILABLE
+  SYSTEM
+}
+
+// ============== SAVED EVENTS ==============
+
+model SavedEvent {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId   String
+
+  @@unique([userId, eventId])
+  @@index([userId])
+  @@index([eventId])
+  @@map("saved_events")
 }
 
 // ============== MERCHANTS (Sub-merchants under PassAddis) ==============
@@ -312,9 +417,16 @@ model Organizer {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Social / public profile fields
+  website       String?
+  socialLinks   Json?     // { instagram, twitter, facebook, tiktok }
+  bannerImage   String?
+  featuredVideoUrl String?
+
   user          User     @relation(fields: [userId], references: [id])
   userId        String   @unique
   events        Event[]
+  followers     OrganizerFollow[]
 
   @@index([isVerified])
   @@map("organizers")
@@ -336,6 +448,27 @@ model Event {
   status          EventStatus @default(DRAFT)
   isFeatured      Boolean     @default(false)
 
+  // Media gallery
+  imageGallery    Json?       // Array of image URLs
+  videoUrl        String?     // YouTube/Vimeo embed URL
+
+  // Fee absorption (organizer pays platform fee)
+  absorbsFees     Boolean     @default(false)
+
+  // Donation support
+  donationsEnabled Boolean    @default(false)
+  donationGoal    Float?      // Target amount (optional)
+
+  // Presale
+  presaleEnabled  Boolean     @default(false)
+  presaleStartsAt DateTime?
+  presaleEndsAt   DateTime?
+
+  // Group tickets
+  groupDiscountEnabled Boolean @default(false)
+  groupMinSize    Int?        @default(5)
+  groupDiscountPercent Float? @default(10)
+
   // Approval workflow
   submittedAt     DateTime?   // When submitted for approval
   approvedAt      DateTime?   // When approved by admin
@@ -348,6 +481,13 @@ model Event {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
+  // Recurring event support
+  isRecurring     Boolean     @default(false)
+  recurrenceRule  String?     // RRULE string (e.g., "FREQ=WEEKLY;BYDAY=SA;COUNT=10")
+  parentEventId   String?     // Links to parent recurring event
+  parentEvent     Event?      @relation("RecurringEvents", fields: [parentEventId], references: [id])
+  childEvents     Event[]     @relation("RecurringEvents")
+
   // Can be linked to either Organizer (legacy) or Merchant (new)
   organizer     Organizer?  @relation(fields: [organizerId], references: [id])
   organizerId   String?
@@ -359,6 +499,14 @@ model Event {
   promoCodes    PromoCode[]
   waitlist      Waitlist[]
   shopItems     ShopItem[]
+  savedBy       SavedEvent[]
+  sessions      EventSession[]
+  messages      EventMessage[]
+  referrals     Referral[]
+  ratings       EventRating[]
+  donations     Donation[]
+  resaleListings TicketResale[]
+  presaleCodes  PresaleCode[]
 
   @@index([merchantId])
   @@index([organizerId])
@@ -366,6 +514,7 @@ model Event {
   @@index([date])
   @@index([category])
   @@index([isFeatured])
+  @@index([parentEventId])
   @@index([status, date])  // Composite for published events by date
   @@map("events")
 }
@@ -454,6 +603,7 @@ model Ticket {
   order       Order?       @relation(fields: [orderId], references: [id])
   orderId     String?
   transfers   TicketTransfer[]
+  resale      TicketResale?
 
   @@index([userId])
   @@index([eventId])
@@ -624,6 +774,12 @@ model Order {
   // Ticket purchase metadata (stored until payment confirmed)
   ticketMetadata  Json?         // Stores {eventId, tickets: [{ticketTypeId, quantity, price}]}
 
+  // Gift ticket fields
+  isGift          Boolean       @default(false)
+  recipientPhone  String?
+  recipientName   String?
+  giftMessage     String?
+
   // Cancellation support
   cancelledAt     DateTime?
   cancelledBy     String?       // 'user', 'admin', or 'system'
@@ -712,6 +868,8 @@ enum PaymentMethod {
   TELEBIRR
   CBE_BIRR
   BANK_TRANSFER
+  STRIPE
+  PAYPAL
 }
 
 enum PaymentStatus {
@@ -720,4 +878,198 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   REFUNDED
+}
+
+// ============== EVENT SESSIONS (Multi-Day/Multi-Session) ==============
+
+model EventSession {
+  id          String   @id @default(uuid())
+  title       String   // "Day 1 - Opening Ceremony", "Morning Session"
+  date        DateTime
+  endDate     DateTime?
+  venue       String?  // Override event venue if different
+  capacity    Int?     // Override event capacity if limited
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId     String
+
+  @@index([eventId])
+  @@index([eventId, date])
+  @@map("event_sessions")
+}
+
+// ============== EVENT MESSAGES (Organizer → Attendees) ==============
+
+model EventMessage {
+  id          String              @id @default(uuid())
+  subject     String
+  body        String
+  channel     MessageChannel      @default(SMS)
+  status      MessageStatus       @default(DRAFT)
+  recipientCount Int              @default(0)
+  sentCount   Int                 @default(0)
+  failedCount Int                 @default(0)
+  sentAt      DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  event       Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId     String
+  sentBy      String?             // Organizer user ID
+
+  @@index([eventId])
+  @@index([eventId, status])
+  @@map("event_messages")
+}
+
+enum MessageChannel {
+  SMS
+  WHATSAPP
+  EMAIL
+  PUSH
+}
+
+enum MessageStatus {
+  DRAFT
+  SENDING
+  SENT
+  FAILED
+}
+
+// ============== REFERRAL / AFFILIATE SYSTEM ==============
+
+model Referral {
+  id              String        @id @default(uuid())
+  code            String        @unique    // e.g., "JOHN2026", auto-generated
+  commissionRate  Float         @default(5) // Percentage commission for referrer
+  clicks          Int           @default(0)
+  conversions     Int           @default(0) // Tickets sold via this link
+  totalEarnings   Float         @default(0)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  referrer        User          @relation("ReferrerUser", fields: [referrerId], references: [id])
+  referrerId      String
+  event           Event?        @relation(fields: [eventId], references: [id])
+  eventId         String?       // null = global referral link
+
+  @@unique([referrerId, eventId])
+  @@index([code])
+  @@index([referrerId])
+  @@index([eventId])
+  @@map("referrals")
+}
+
+// ============== FOLLOW ORGANIZERS ==============
+
+model OrganizerFollow {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  organizer   Organizer @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+  organizerId String
+
+  @@unique([userId, organizerId])
+  @@index([userId])
+  @@index([organizerId])
+  @@map("organizer_follows")
+}
+
+// ============== PRESALE / EARLY ACCESS CODES ==============
+
+model PresaleCode {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  maxUses     Int      @default(1)
+  usedCount   Int      @default(0)
+  isActive    Boolean  @default(true)
+  validFrom   DateTime
+  validUntil  DateTime
+  createdAt   DateTime @default(now())
+
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId     String
+
+  @@index([code])
+  @@index([eventId])
+  @@map("presale_codes")
+}
+
+// ============== TICKET RESALE MARKETPLACE ==============
+
+model TicketResale {
+  id            String        @id @default(uuid())
+  askingPrice   Float         // Max 150% of original price
+  originalPrice Float
+  status        ResaleStatus  @default(LISTED)
+  platformFee   Float         @default(0) // Calculated on sale
+  listedAt      DateTime      @default(now())
+  soldAt        DateTime?
+  cancelledAt   DateTime?
+
+  ticket        Ticket        @relation(fields: [ticketId], references: [id])
+  ticketId      String        @unique
+  sellerId      String
+  buyerId       String?       // Set when purchased
+  event         Event         @relation(fields: [eventId], references: [id])
+  eventId       String
+
+  @@index([eventId, status])
+  @@index([sellerId])
+  @@map("ticket_resales")
+}
+
+enum ResaleStatus {
+  LISTED
+  SOLD
+  CANCELLED
+  EXPIRED
+}
+
+// ============== EVENT RATINGS & SURVEYS ==============
+
+model EventRating {
+  id          String   @id @default(uuid())
+  rating      Int      // 1-5 stars
+  review      String?
+  isAnonymous Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId     String
+
+  @@unique([userId, eventId])
+  @@index([eventId])
+  @@map("event_ratings")
+}
+
+// ============== DONATIONS ==============
+
+model Donation {
+  id          String   @id @default(uuid())
+  amount      Float
+  currency    String   @default("ETB")
+  message     String?
+  isAnonymous Boolean  @default(false)
+  paymentRef  String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+  event       Event    @relation(fields: [eventId], references: [id])
+  eventId     String
+
+  @@index([eventId])
+  @@index([userId])
+  @@map("donations")
 }

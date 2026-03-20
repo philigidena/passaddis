@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Search, Filter, Calendar, Loader2 } from 'lucide-react';
+import { Search, Filter, Calendar, Loader2, Heart } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { EventCard } from '@/components/events/EventCard';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useEvents } from '@/hooks/useEvents';
+import { useSavedEvents } from '@/hooks/useSavedEvents';
+import { useAuth } from '@/context/AuthContext';
 import clsx from 'clsx';
 
 const CATEGORIES = [
@@ -21,7 +23,10 @@ const CATEGORIES = [
 export function EventsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
   const { events, isLoading, error, fetchByCategory, searchEvents } = useEvents();
+  const { isEventSaved, toggleSave, savedEvents, fetchSavedEvents } = useSavedEvents();
+  const { isAuthenticated } = useAuth();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +38,16 @@ export function EventsPage() {
     fetchByCategory(category);
   };
 
-  const filteredEvents = events.filter((event) => {
+  const handleShowSaved = () => {
+    if (!showSavedOnly) {
+      fetchSavedEvents();
+    }
+    setShowSavedOnly(!showSavedOnly);
+  };
+
+  const displayEvents = showSavedOnly ? savedEvents : events;
+
+  const filteredEvents = displayEvents.filter((event) => {
     const matchesCategory = selectedCategory === 'all' || event.category === selectedCategory;
     const matchesSearch =
       !searchQuery ||
@@ -72,13 +86,30 @@ export function EventsPage() {
 
             {/* Category Filters */}
             <div className="mt-6 flex flex-wrap gap-2">
+              {isAuthenticated && (
+                <button
+                  onClick={handleShowSaved}
+                  className={clsx(
+                    'px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-1.5',
+                    showSavedOnly
+                      ? 'bg-red-500 text-white'
+                      : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+                  )}
+                >
+                  <Heart className={clsx('w-3.5 h-3.5', showSavedOnly && 'fill-current')} />
+                  Saved
+                </button>
+              )}
               {CATEGORIES.map((category) => (
                 <button
                   key={category.value}
-                  onClick={() => handleCategoryChange(category.value)}
+                  onClick={() => {
+                    setShowSavedOnly(false);
+                    handleCategoryChange(category.value);
+                  }}
                   className={clsx(
                     'px-4 py-2 rounded-full text-sm font-medium transition-colors',
-                    selectedCategory === category.value
+                    !showSavedOnly && selectedCategory === category.value
                       ? 'bg-primary text-white'
                       : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
                   )}
@@ -139,7 +170,12 @@ export function EventsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredEvents.map((event) => (
-                  <EventCard key={event.id} event={event} />
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    isSaved={isEventSaved(event.id)}
+                    onToggleSave={isAuthenticated ? toggleSave : undefined}
+                  />
                 ))}
               </div>
             </>

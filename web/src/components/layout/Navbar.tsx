@@ -1,15 +1,32 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, LogOut, Calendar, ShoppingBag, LayoutDashboard, Building2, Store, ChevronDown, Ticket } from 'lucide-react';
+import { Menu, X, User, LogOut, Calendar, ShoppingBag, LayoutDashboard, Building2, Store, ChevronDown, Ticket, Bell, Check, Trash2, Globe, Wallet, Languages } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useNotifications } from '@/hooks/useNotifications';
+import { useCurrency } from '@/hooks/useCurrency';
+import { useLocale } from '@/hooks/useLocale';
 import clsx from 'clsx';
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const currencyRef = useRef<HTMLDivElement>(null);
   const { user, isAuthenticated, logout } = useAuth();
+  const { currency, setCurrency, currencies } = useCurrency();
+  const { locale, setLocale, locales, t } = useLocale();
+  const {
+    notifications,
+    unreadCount,
+    fetchNotifications,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+  } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -22,11 +39,17 @@ export function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setShowUserMenu(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+      if (currencyRef.current && !currencyRef.current.contains(event.target as Node)) {
+        setShowCurrencyPicker(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -132,7 +155,150 @@ export function Navbar() {
 
           {/* Auth Buttons */}
           <div className="hidden md:flex items-center gap-3">
+            {/* Language Picker */}
+            <button
+              onClick={() => setLocale(locale === 'en' ? 'am' : 'en')}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-300 text-xs font-medium text-white/70"
+              title={locale === 'en' ? 'Switch to Amharic' : 'Switch to English'}
+            >
+              <Languages className="w-3.5 h-3.5" />
+              {locale === 'en' ? 'EN' : 'አማ'}
+            </button>
+
+            {/* Currency Picker */}
+            <div className="relative" ref={currencyRef}>
+              <button
+                onClick={() => setShowCurrencyPicker(!showCurrencyPicker)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-300 text-xs font-medium text-white/70"
+              >
+                <Globe className="w-3.5 h-3.5" />
+                {currency}
+              </button>
+              <div className={clsx(
+                'absolute right-0 top-full mt-2 w-48 origin-top-right transition-all duration-200',
+                showCurrencyPicker
+                  ? 'opacity-100 scale-100'
+                  : 'opacity-0 scale-95 pointer-events-none'
+              )}>
+                <div className="bg-dark-card/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-lg py-1">
+                  {currencies.map((c) => (
+                    <button
+                      key={c.code}
+                      onClick={() => {
+                        setCurrency(c.code);
+                        setShowCurrencyPicker(false);
+                      }}
+                      className={clsx(
+                        'w-full text-left px-4 py-2 text-sm transition-colors',
+                        currency === c.code
+                          ? 'text-primary bg-primary/5'
+                          : 'text-white/70 hover:text-white hover:bg-white/5'
+                      )}
+                    >
+                      <span className="font-medium">{c.symbol}</span>{' '}
+                      <span className="text-white/40">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {isAuthenticated ? (
+              <>
+              {/* Notification Bell */}
+              <div className="relative" ref={notifRef}>
+                <button
+                  onClick={() => {
+                    setShowNotifications(!showNotifications);
+                    if (!showNotifications) fetchNotifications();
+                  }}
+                  className="relative p-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-300"
+                >
+                  <Bell className="w-4 h-4 text-white/70" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notification Dropdown */}
+                <div className={clsx(
+                  'absolute right-0 top-full mt-3 w-80 origin-top-right transition-all duration-300',
+                  showNotifications
+                    ? 'opacity-100 scale-100 translate-y-0'
+                    : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
+                )}>
+                  <div className="bg-dark-card/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
+                    <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                      <h3 className="text-white font-semibold text-sm">Notifications</h3>
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={markAllAsRead}
+                          className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
+                        >
+                          <Check className="w-3 h-3" />
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-80 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="p-8 text-center">
+                          <Bell className="w-8 h-8 text-white/20 mx-auto mb-2" />
+                          <p className="text-white/40 text-sm">No notifications yet</p>
+                        </div>
+                      ) : (
+                        notifications.map((notif) => (
+                          <div
+                            key={notif.id}
+                            className={clsx(
+                              'px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors',
+                              !notif.isRead && 'bg-primary/5'
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  {!notif.isRead && (
+                                    <span className="w-2 h-2 bg-primary rounded-full flex-shrink-0" />
+                                  )}
+                                  <p className="text-white text-sm font-medium truncate">{notif.title}</p>
+                                </div>
+                                <p className="text-white/50 text-xs mt-0.5 line-clamp-2">{notif.message}</p>
+                                <p className="text-white/30 text-[10px] mt-1">
+                                  {new Date(notif.createdAt).toLocaleDateString('en-US', {
+                                    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                                  })}
+                                </p>
+                              </div>
+                              <div className="flex gap-1 flex-shrink-0">
+                                {!notif.isRead && (
+                                  <button
+                                    onClick={() => markAsRead(notif.id)}
+                                    className="p-1 text-white/30 hover:text-primary transition-colors"
+                                    title="Mark as read"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => deleteNotification(notif.id)}
+                                  className="p-1 text-white/30 hover:text-red-400 transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
@@ -190,6 +356,14 @@ export function Navbar() {
                         <Ticket className="w-4 h-4" />
                         <span className="text-sm">My Tickets</span>
                       </Link>
+                      <Link
+                        to="/wallet"
+                        onClick={() => setShowUserMenu(false)}
+                        className="flex items-center gap-3 px-4 py-3 text-white/70 hover:text-white hover:bg-white/5 transition-all duration-200"
+                      >
+                        <Wallet className="w-4 h-4" />
+                        <span className="text-sm">Wallet</span>
+                      </Link>
                       {primaryDashboard && (
                         <Link
                           to={primaryDashboard.path}
@@ -213,6 +387,7 @@ export function Navbar() {
                   </div>
                 </div>
               </div>
+              </>
             ) : (
               <div className="flex items-center gap-2">
                 <Link

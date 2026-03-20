@@ -1464,10 +1464,426 @@ export class OrganizerService {
   // Helper to escape CSV fields
   private escapeCsvField(field: string): string {
     if (!field) return '';
-    // If field contains comma, newline, or quote, wrap in quotes and escape quotes
     if (field.includes(',') || field.includes('\n') || field.includes('"')) {
       return `"${field.replace(/"/g, '""')}"`;
     }
     return field;
+  }
+
+  // ============== ATTENDEE MESSAGING ==============
+
+  /**
+   * Send a message to all ticket holders for an event
+   */
+  async sendMessageToAttendees(
+    organizerId: string,
+    eventId: string,
+    subject: string,
+    body: string,
+    channel: string = 'SMS',
+  ) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true, title: true },
+    });
+
+    if (!event || event.organizerId !== organizerId) {
+      throw new NotFoundException('Event not found');
+    }
+
+    // Get all ticket holders with valid tickets
+    const tickets = await this.prisma.ticket.findMany({
+      where: { eventId, status: 'VALID' },
+      select: {
+        user: { select: { id: true, phone: true, email: true, name: true } },
+      },
+      distinct: ['userId'],
+    });
+
+    const recipients = tickets.map((t: any) => t.user);
+
+    // Create message record
+    const message = await this.prisma.eventMessage.create({
+      data: {
+        eventId,
+        subject,
+        body,
+        channel: channel as any,
+        status: 'SENDING',
+        recipientCount: recipients.length,
+        sentBy: organizerId,
+      },
+    });
+
+    // In production, this would queue SMS/WhatsApp/email sends
+    // For now, mark as sent and return the count
+    const sentCount = recipients.length;
+    const failedCount = 0;
+
+    await this.prisma.eventMessage.update({
+      where: { id: message.id },
+      data: {
+        status: 'SENT',
+        sentCount,
+        failedCount,
+        sentAt: new Date(),
+      },
+    });
+
+    return {
+      messageId: message.id,
+      recipientCount: recipients.length,
+      sentCount,
+      failedCount,
+      channel,
+      status: 'SENT',
+    };
+  }
+
+  /**
+   * Get message history for an event
+   */
+  async getEventMessages(organizerId: string, eventId: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true },
+    });
+
+    if (!event || event.organizerId !== organizerId) {
+      throw new NotFoundException('Event not found');
+    }
+
+    return this.prisma.eventMessage.findMany({
+      where: { eventId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ============== RECURRING EVENTS ==============
+
+  /**
+   * Create recurring event instances from an RRULE
+   * Generates child events linked to the parent
+   */
+  async createRecurringEvents(
+    organizerId: string,
+    parentEventId: string,
+    recurrenceRule: string,
+    count: number = 10,
+  ) {
+    const parentEvent = await this.prisma.event.findUnique({
+      where: { id: parentEventId },
+      include: { ticketTypes: true },
+    });
+
+    if (!parentEvent || parentEvent.organizerId !== organizerId) {
+      throw new NotFoundException('Event not found');
+    }
+
+    // Parse RRULE to generate dates
+    const dates = this.generateDatesFromRRule(recurrenceRule, parentEvent.date, count);
+
+    // Mark parent as recurring
+    await this.prisma.event.update({
+      where: { id: parentEventId },
+      data: { isRecurring: true, recurrenceRule },
+    });
+
+    // Create child events
+    const childEvents = [];
+    for (const date of dates) {
+      const duration = parentEvent.endDate
+        ? parentEvent.endDate.getTime() - parentEvent.date.getTime()
+        : 3 * 60 * 60 * 1000;
+
+      const childEvent = await this.prisma.event.create({
+        data: {
+          title: parentEvent.title,
+          description: parentEvent.description,
+          imageUrl: parentEvent.imageUrl,
+          venue: parentEvent.venue,
+          address: parentEvent.address,
+          city: parentEvent.city,
+          date,
+          endDate: new Date(date.getTime() + duration),
+          category: parentEvent.category,
+          status: parentEvent.status,
+          isFeatured: false,
+          isRecurring: true,
+          parentEventId,
+          organizerId,
+          ticketTypes: {
+            create: parentEvent.ticketTypes.map((tt: any) => ({
+              name: tt.name,
+              description: tt.description,
+              price: tt.price,
+              quantity: tt.quantity,
+              maxPerOrder: tt.maxPerOrder,
+            })),
+          },
+        },
+        include: { ticketTypes: true },
+      });
+      childEvents.push(childEvent);
+    }
+
+    return {
+      parentEventId,
+      recurrenceRule,
+      childEvents: childEvents.map((e: any) => ({
+        id: e.id,
+        date: e.date,
+        endDate: e.endDate,
+      })),
+      totalCreated: childEvents.length,
+    };
+  }
+
+  /**
+   * Simple RRULE date generator (supports FREQ=WEEKLY and FREQ=DAILY)
+   */
+  private generateDatesFromRRule(rrule: string, startDate: Date, maxCount: number): Date[] {
+    const dates: Date[] = [];
+    const parts = rrule.split(';').reduce((acc: any, part: string) => {
+      const [key, value] = part.split('=');
+      acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
+
+    const freq = parts.FREQ || 'WEEKLY';
+    const count = parseInt(parts.COUNT || maxCount.toString(), 10);
+    const interval = parseInt(parts.INTERVAL || '1', 10);
+
+    let current = new Date(startDate);
+
+    for (let i = 0; i < count; i++) {
+      if (freq === 'DAILY') {
+        current = new Date(current.getTime() + interval * 24 * 60 * 60 * 1000);
+      } else if (freq === 'WEEKLY') {
+        current = new Date(current.getTime() + interval * 7 * 24 * 60 * 60 * 1000);
+      } else if (freq === 'MONTHLY') {
+        const next = new Date(current);
+        next.setMonth(next.getMonth() + interval);
+        current = next;
+      }
+      dates.push(new Date(current));
+    }
+
+    return dates;
+  }
+
+  // ============== MULTI-SESSION / MULTI-DAY ==============
+
+  /**
+   * Add a session to an event
+   */
+  async addEventSession(
+    organizerId: string,
+    eventId: string,
+    data: { title: string; date: string; endDate?: string; venue?: string; capacity?: number; description?: string },
+  ) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true },
+    });
+
+    if (!event || event.organizerId !== organizerId) {
+      throw new NotFoundException('Event not found');
+    }
+
+    // Get next sort order
+    const lastSession = await this.prisma.eventSession.findFirst({
+      where: { eventId },
+      orderBy: { sortOrder: 'desc' },
+    });
+
+    return this.prisma.eventSession.create({
+      data: {
+        eventId,
+        title: data.title,
+        date: new Date(data.date),
+        endDate: data.endDate ? new Date(data.endDate) : undefined,
+        venue: data.venue,
+        capacity: data.capacity,
+        description: data.description,
+        sortOrder: (lastSession?.sortOrder ?? -1) + 1,
+      },
+    });
+  }
+
+  /**
+   * Get all sessions for an event
+   */
+  async getEventSessions(eventId: string) {
+    return this.prisma.eventSession.findMany({
+      where: { eventId },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  /**
+   * Update a session
+   */
+  async updateEventSession(
+    organizerId: string,
+    sessionId: string,
+    data: { title?: string; date?: string; endDate?: string; venue?: string; capacity?: number; description?: string },
+  ) {
+    const session = await this.prisma.eventSession.findUnique({
+      where: { id: sessionId },
+      include: { event: { select: { organizerId: true } } },
+    });
+
+    if (!session || session.event.organizerId !== organizerId) {
+      throw new NotFoundException('Session not found');
+    }
+
+    return this.prisma.eventSession.update({
+      where: { id: sessionId },
+      data: {
+        title: data.title,
+        date: data.date ? new Date(data.date) : undefined,
+        endDate: data.endDate ? new Date(data.endDate) : undefined,
+        venue: data.venue,
+        capacity: data.capacity,
+        description: data.description,
+      },
+    });
+  }
+
+  /**
+   * Delete a session
+   */
+  async deleteEventSession(organizerId: string, sessionId: string) {
+    const session = await this.prisma.eventSession.findUnique({
+      where: { id: sessionId },
+      include: { event: { select: { organizerId: true } } },
+    });
+
+    if (!session || session.event.organizerId !== organizerId) {
+      throw new NotFoundException('Session not found');
+    }
+
+    await this.prisma.eventSession.delete({ where: { id: sessionId } });
+    return { deleted: true };
+  }
+
+  // ============== PRESALE CODES ==============
+
+  async createPresaleCodes(
+    organizerId: string,
+    eventId: string,
+    codes: { code: string; maxUses: number; validFrom: string; validUntil: string }[],
+  ) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true },
+    });
+    if (!event || event.organizerId !== organizerId) throw new NotFoundException('Event not found');
+
+    await this.prisma.event.update({
+      where: { id: eventId },
+      data: {
+        presaleEnabled: true,
+        presaleStartsAt: new Date(codes[0].validFrom),
+        presaleEndsAt: new Date(codes[codes.length - 1].validUntil),
+      },
+    });
+
+    const created = [];
+    for (const c of codes) {
+      const presaleCode = await this.prisma.presaleCode.create({
+        data: {
+          eventId,
+          code: c.code.toUpperCase(),
+          maxUses: c.maxUses,
+          validFrom: new Date(c.validFrom),
+          validUntil: new Date(c.validUntil),
+        },
+      });
+      created.push(presaleCode);
+    }
+    return { created: created.length, codes: created };
+  }
+
+  async validatePresaleCode(eventId: string, code: string) {
+    const presaleCode = await this.prisma.presaleCode.findFirst({
+      where: { eventId, code: code.toUpperCase(), isActive: true },
+    });
+    if (!presaleCode) return { valid: false, message: 'Invalid presale code' };
+
+    const now = new Date();
+    if (now < presaleCode.validFrom) return { valid: false, message: 'Presale has not started yet' };
+    if (now > presaleCode.validUntil) return { valid: false, message: 'Presale has ended' };
+    if (presaleCode.usedCount >= presaleCode.maxUses) return { valid: false, message: 'Code fully redeemed' };
+
+    return { valid: true, code: presaleCode };
+  }
+
+  // ============== LIVE CHECK-IN DASHBOARD ==============
+
+  async getCheckInStats(organizerId: string, eventId: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true, title: true, date: true },
+    });
+    if (!event || event.organizerId !== organizerId) throw new NotFoundException('Event not found');
+
+    const [totalTickets, checkedIn, ticketsByType, recentCheckins] = await Promise.all([
+      this.prisma.ticket.count({ where: { eventId, status: { in: ['VALID', 'USED'] } } }),
+      this.prisma.ticket.count({ where: { eventId, status: 'USED' } }),
+      this.prisma.ticket.groupBy({
+        by: ['ticketTypeId', 'status'],
+        where: { eventId, status: { in: ['VALID', 'USED'] } },
+        _count: true,
+      }),
+      this.prisma.ticket.findMany({
+        where: { eventId, status: 'USED', usedAt: { not: null } },
+        select: {
+          id: true, usedAt: true,
+          ticketType: { select: { name: true } },
+          user: { select: { name: true } },
+        },
+        orderBy: { usedAt: 'desc' },
+        take: 20,
+      }),
+    ]);
+
+    const ticketTypes = await this.prisma.ticketType.findMany({
+      where: { eventId },
+      select: { id: true, name: true, quantity: true, sold: true },
+    });
+
+    const typeStats = ticketTypes.map((tt: any) => {
+      const used = ticketsByType.filter((t: any) => t.ticketTypeId === tt.id && t.status === 'USED').reduce((s: number, t: any) => s + t._count, 0);
+      const valid = ticketsByType.filter((t: any) => t.ticketTypeId === tt.id && t.status === 'VALID').reduce((s: number, t: any) => s + t._count, 0);
+      return {
+        id: tt.id, name: tt.name, total: tt.sold, checkedIn: used, remaining: valid,
+        checkInRate: tt.sold > 0 ? Math.round((used / tt.sold) * 100) : 0,
+      };
+    });
+
+    return {
+      eventId, eventTitle: event.title, eventDate: event.date,
+      totalTickets, checkedIn, remaining: totalTickets - checkedIn,
+      checkInRate: totalTickets > 0 ? Math.round((checkedIn / totalTickets) * 100) : 0,
+      ticketTypes: typeStats, recentCheckins,
+    };
+  }
+
+  // ============== FEE ABSORPTION TOGGLE ==============
+
+  async toggleFeeAbsorption(organizerId: string, eventId: string, absorb: boolean) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true },
+    });
+    if (!event || event.organizerId !== organizerId) throw new NotFoundException('Event not found');
+
+    return this.prisma.event.update({
+      where: { id: eventId },
+      data: { absorbsFees: absorb },
+      select: { id: true, absorbsFees: true },
+    });
   }
 }

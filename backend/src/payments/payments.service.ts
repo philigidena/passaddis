@@ -9,7 +9,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelebirrProvider, TelebirrCallbackData } from './providers/telebirr.provider';
+import { StripeProvider } from './providers/stripe.provider';
+import { ChapaProvider } from './providers/chapa.provider';
 import { TicketsService } from '../tickets/tickets.service';
+import { WaitlistService } from '../waitlist/waitlist.service';
 import {
   InitiatePaymentDto,
   PaymentMethod,
@@ -30,8 +33,11 @@ export class PaymentsService {
     private prisma: PrismaService,
     private configService: ConfigService,
     private telebirrProvider: TelebirrProvider,
+    private stripeProvider: StripeProvider,
+    private chapaProvider: ChapaProvider,
     @Inject(forwardRef(() => TicketsService))
     private ticketsService: TicketsService,
+    private waitlistService: WaitlistService,
   ) {
     this.frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:8081';
@@ -199,30 +205,133 @@ export class PaymentsService {
     }
     this.logger.log(`[INITIATE] Payment title: "${title}"`);
 
+    const method = dto.method || PaymentMethod.TELEBIRR;
+    const methodStr = method as string as PaymentMethodString;
+
     // Create or update payment record
     const payment = await this.prisma.payment.upsert({
       where: { orderId: order.id },
       create: {
         orderId: order.id,
         amount: order.total,
-        method: 'TELEBIRR' as PaymentMethodString,
+        method: methodStr,
         status: 'PENDING',
       },
       update: {
-        method: 'TELEBIRR' as PaymentMethodString,
+        method: methodStr,
         status: 'PENDING',
       },
     });
-    this.logger.log(`[INITIATE] Payment record upserted: id=${payment.id} status=PENDING amount=${payment.amount}`);
-
-    // URLs for Telebirr
-    const notifyUrl = `${this.apiUrl}/api/payments/callback/telebirr`;
+    this.logger.log(`[INITIATE] Payment record upserted: id=${payment.id} status=PENDING amount=${payment.amount} method=${method}`);
 
     // Return URL based on order type (ticket vs shop)
-    const isTicketOrder = order.tickets.length > 0;
+    const isTicketOrder = order.tickets.length > 0 || (order as any).ticketMetadata;
     const returnUrl = isTicketOrder
       ? `${this.frontendUrl}/tickets?payment_status=success&order_id=${order.id}`
       : `${this.frontendUrl}/shop/orders/${order.id}?payment_status=success`;
+
+    // ─── STRIPE FLOW ───
+    if (method === PaymentMethod.STRIPE) {
+      this.logger.log(`[INITIATE] Using Stripe for international payment`);
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      });
+
+      const cancelUrl = `${this.frontendUrl}/events`;
+
+      const stripeResult = await this.stripeProvider.createCheckoutSession({
+        amount: order.total,
+        currency: (dto as any).currency || 'USD',
+        orderId: order.id,
+        title,
+        customerEmail: user?.email || undefined,
+        successUrl: returnUrl,
+        cancelUrl,
+        metadata: { orderNumber: order.orderNumber },
+      });
+
+      if (!stripeResult.success) {
+        this.logger.error(`[INITIATE] Stripe payment FAILED: ${stripeResult.error}`);
+        throw new BadRequestException(stripeResult.error || 'Payment initialization failed');
+      }
+
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          providerRef: stripeResult.sessionId,
+          status: 'PROCESSING',
+          providerData: { sessionId: stripeResult.sessionId } as any,
+        },
+      });
+
+      this.logger.log(`[INITIATE] ── DONE Stripe checkout session created for order ${order.id}`);
+
+      return {
+        paymentId: payment.id,
+        orderId: order.id,
+        amount: order.total,
+        method: 'STRIPE',
+        success: true,
+        checkout_url: stripeResult.checkoutUrl,
+        tx_ref: stripeResult.sessionId,
+      };
+    }
+
+    // ─── CHAPA FLOW ───
+    if (method === PaymentMethod.CHAPA) {
+      this.logger.log(`[INITIATE] Using Chapa unified gateway`);
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { phone: true, email: true },
+      });
+
+      const chapaResult = await this.chapaProvider.initiatePayment({
+        amount: order.total,
+        currency: 'ETB',
+        phone: user?.phone || '',
+        email: user?.email || undefined,
+        tx_ref: `PA-${order.id}-${Date.now()}`,
+        callback_url: `${this.apiUrl}/api/payments/callback/chapa`,
+        return_url: returnUrl,
+        customization: {
+          title: 'PassAddis',
+          description: title,
+        },
+      });
+
+      if (!chapaResult.success) {
+        this.logger.error(`[INITIATE] Chapa payment FAILED: ${chapaResult.error}`);
+        throw new BadRequestException(chapaResult.error || 'Payment initialization failed');
+      }
+
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          providerRef: chapaResult.tx_ref,
+          status: 'PROCESSING',
+          method: 'CHAPA',
+          providerData: { tx_ref: chapaResult.tx_ref } as any,
+        },
+      });
+
+      this.logger.log(`[INITIATE] ── DONE Chapa checkout URL generated for order ${order.id}`);
+
+      return {
+        paymentId: payment.id,
+        orderId: order.id,
+        amount: order.total,
+        method: 'CHAPA',
+        success: true,
+        checkout_url: chapaResult.checkout_url,
+        tx_ref: chapaResult.tx_ref,
+      };
+    }
+
+    // ─── TELEBIRR FLOW (default) ───
+    const notifyUrl = `${this.apiUrl}/api/payments/callback/telebirr`;
 
     this.logger.log(`[INITIATE] notifyUrl=${notifyUrl}`);
     this.logger.log(`[INITIATE] returnUrl=${returnUrl}`);
@@ -265,6 +374,7 @@ export class PaymentsService {
       orderId: order.id,
       amount: order.total,
       method: 'TELEBIRR',
+      success: true,
       checkout_url: result.checkoutUrl,
       raw_request: result.rawRequest,
       web_base_url: 'https://196.188.120.3:38443/payment/web/paygate',
@@ -815,11 +925,202 @@ export class PaymentsService {
 
     this.logger.log(`[REFUND] ── DONE: order ${order.id} refunded, refundOrderId=${refundResult.refundOrderId}`);
 
+    // Trigger waitlist auto-upgrade if ticket refund freed up availability
+    if (order.tickets.length > 0) {
+      const eventId = order.tickets[0].eventId;
+      try {
+        const upgradeResult = await this.waitlistService.autoUpgradeWaitlist(
+          eventId,
+          order.tickets[0].ticketTypeId,
+        );
+        if (upgradeResult.upgraded > 0) {
+          this.logger.log(`[WAITLIST] Auto-upgraded ${upgradeResult.upgraded} waitlisted users for event ${eventId}`);
+        }
+      } catch (error) {
+        this.logger.warn(`[WAITLIST] Auto-upgrade failed: ${error.message}`);
+      }
+    }
+
     return {
       success: true,
       message: 'Refund processed successfully',
       refundOrderId: refundResult.refundOrderId,
       refundStatus: refundResult.refundStatus,
     };
+  }
+
+  /**
+   * Handle Chapa webhook/callback
+   */
+  async handleChapaCallback(payload: any, signature?: string) {
+    this.logger.log(`[CHAPA_CALLBACK] Received: tx_ref=${payload.tx_ref} status=${payload.status}`);
+
+    // Verify webhook signature if provided
+    if (signature && !this.chapaProvider.verifyWebhook(signature, JSON.stringify(payload))) {
+      this.logger.error('[CHAPA_CALLBACK] Invalid webhook signature');
+      return { success: false, message: 'Invalid signature' };
+    }
+
+    const txRef = payload.tx_ref || payload.trx_ref;
+    if (!txRef) {
+      this.logger.error('[CHAPA_CALLBACK] Missing tx_ref');
+      return { success: false, message: 'Missing transaction reference' };
+    }
+
+    // Find payment by provider reference
+    const payment = await this.prisma.payment.findFirst({
+      where: { providerRef: txRef },
+      include: { order: true },
+    });
+
+    if (!payment) {
+      this.logger.error(`[CHAPA_CALLBACK] Payment not found for tx_ref=${txRef}`);
+      return { success: false, message: 'Payment not found' };
+    }
+
+    if (payment.status === 'COMPLETED') {
+      return { success: true, message: 'Already processed' };
+    }
+
+    // Verify with Chapa API
+    const verification = await this.chapaProvider.verifyPayment(txRef);
+    const isSuccess = verification?.status === 'success' ||
+      payload.status === 'success' ||
+      payload.status === 'completed';
+
+    this.logger.log(`[CHAPA_CALLBACK] Verification: ${JSON.stringify(verification?.status)} isSuccess=${isSuccess}`);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: isSuccess ? 'COMPLETED' : 'FAILED',
+          providerData: { ...payload, verification } as any,
+        },
+      });
+
+      await tx.order.update({
+        where: { id: payment.orderId },
+        data: {
+          status: isSuccess ? 'PAID' : 'PENDING',
+          paymentMethod: 'CHAPA',
+          paymentRef: payload.reference || txRef,
+        },
+      });
+
+      if (isSuccess) {
+        // Deduct stock for shop orders
+        const order = await tx.order.findUnique({
+          where: { id: payment.orderId },
+          include: { items: true },
+        });
+
+        if (order && order.items.length > 0) {
+          for (const item of order.items) {
+            await tx.shopItem.update({
+              where: { id: item.shopItemId },
+              data: { stockQuantity: { decrement: item.quantity } },
+            });
+          }
+        }
+
+        await this.createWalletTransaction(payment.orderId, tx);
+      }
+    });
+
+    if (isSuccess) {
+      try {
+        await this.ticketsService.createTicketsForPaidOrder(payment.orderId);
+      } catch (error) {
+        this.logger.error(`[CHAPA_CALLBACK] Ticket creation failed: ${error?.message}`);
+      }
+    }
+
+    return { success: true, message: 'Payment processed' };
+  }
+
+  /**
+   * Handle Stripe webhook events
+   */
+  async handleStripeWebhook(event: any, signature: string) {
+    this.logger.log(`[STRIPE_WEBHOOK] Event type: ${event.type}`);
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const orderId = session.metadata?.orderId;
+
+      if (!orderId) {
+        this.logger.warn('[STRIPE_WEBHOOK] No orderId in session metadata');
+        return { success: false, message: 'No orderId' };
+      }
+
+      if (session.payment_status === 'paid') {
+        return this.completeStripePayment(orderId, session.id, session.payment_intent);
+      }
+    }
+
+    return { success: true, message: 'Event acknowledged' };
+  }
+
+  /**
+   * Verify a Stripe checkout session (polling from frontend)
+   */
+  async verifyStripeSession(sessionId: string) {
+    const session = await this.stripeProvider.retrieveSession(sessionId);
+
+    if (!session) {
+      return { verified: false, status: 'unknown' };
+    }
+
+    const orderId = session.metadata?.orderId;
+    if (orderId && session.payment_status === 'paid') {
+      // Ensure payment is marked complete
+      const payment = await this.prisma.payment.findFirst({
+        where: { providerRef: sessionId },
+      });
+
+      if (payment && payment.status !== 'COMPLETED') {
+        await this.completeStripePayment(orderId, sessionId, session.payment_intent);
+      }
+
+      return { verified: true, status: 'paid', orderId };
+    }
+
+    return { verified: false, status: session.payment_status || 'pending' };
+  }
+
+  /**
+   * Complete a Stripe payment — mark order as paid and create tickets
+   */
+  private async completeStripePayment(orderId: string, sessionId: string, paymentIntentId?: string) {
+    this.logger.log(`[STRIPE] Completing payment for order ${orderId}`);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.updateMany({
+        where: { orderId, status: { not: 'COMPLETED' } },
+        data: {
+          status: 'COMPLETED',
+          providerRef: sessionId,
+          providerData: { sessionId, paymentIntentId } as any,
+        },
+      });
+
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: 'PAID', paymentMethod: 'STRIPE' },
+      });
+
+      await this.createWalletTransaction(orderId, tx);
+    });
+
+    // Create tickets if this was a ticket order
+    try {
+      await this.ticketsService.createTicketsForPaidOrder(orderId);
+    } catch (error) {
+      this.logger.error(`[STRIPE] Ticket creation failed: ${error.message}`);
+    }
+
+    this.logger.log(`[STRIPE] Payment completed for order ${orderId}`);
+    return { success: true, message: 'Payment completed', orderId };
   }
 }

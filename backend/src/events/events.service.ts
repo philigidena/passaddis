@@ -365,6 +365,137 @@ export class EventsService {
     }));
   }
 
+  // Generate calendar links for an event
+  async getCalendarLinks(id: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        date: true,
+        endDate: true,
+        venue: true,
+        address: true,
+        city: true,
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const startDate = new Date(event.date);
+    const endDate = event.endDate ? new Date(event.endDate) : new Date(startDate.getTime() + 3 * 60 * 60 * 1000); // Default 3 hours
+    const location = [event.venue, event.address, event.city].filter(Boolean).join(', ');
+    const description = event.description.substring(0, 500);
+
+    // Google Calendar
+    const googleParams = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: event.title,
+      dates: `${this.toCalendarDate(startDate)}/${this.toCalendarDate(endDate)}`,
+      details: description,
+      location,
+    });
+    const googleCalendarUrl = `https://calendar.google.com/calendar/render?${googleParams.toString()}`;
+
+    // Outlook / Office 365
+    const outlookParams = new URLSearchParams({
+      path: '/calendar/action/compose',
+      rru: 'addevent',
+      subject: event.title,
+      startdt: startDate.toISOString(),
+      enddt: endDate.toISOString(),
+      body: description,
+      location,
+    });
+    const outlookUrl = `https://outlook.live.com/calendar/0/deeplink/compose?${outlookParams.toString()}`;
+
+    // Yahoo Calendar
+    const yahooParams = new URLSearchParams({
+      v: '60',
+      title: event.title,
+      st: this.toCalendarDate(startDate),
+      et: this.toCalendarDate(endDate),
+      desc: description,
+      in_loc: location,
+    });
+    const yahooUrl = `https://calendar.yahoo.com/?${yahooParams.toString()}`;
+
+    return {
+      eventId: event.id,
+      eventTitle: event.title,
+      googleCalendarUrl,
+      outlookUrl,
+      yahooUrl,
+      icsUrl: `/api/events/${id}/calendar/ics`,
+    };
+  }
+
+  // Generate .ics file content
+  async generateIcsFile(id: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        date: true,
+        endDate: true,
+        venue: true,
+        address: true,
+        city: true,
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const startDate = new Date(event.date);
+    const endDate = event.endDate ? new Date(event.endDate) : new Date(startDate.getTime() + 3 * 60 * 60 * 1000);
+    const location = [event.venue, event.address, event.city].filter(Boolean).join(', ');
+    const now = new Date();
+
+    const icsContent = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//PassAddis//Event//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      'BEGIN:VEVENT',
+      `UID:${event.id}@passaddis.com`,
+      `DTSTAMP:${this.toCalendarDate(now)}`,
+      `DTSTART:${this.toCalendarDate(startDate)}`,
+      `DTEND:${this.toCalendarDate(endDate)}`,
+      `SUMMARY:${this.escapeIcs(event.title)}`,
+      `DESCRIPTION:${this.escapeIcs(event.description.substring(0, 500))}`,
+      `LOCATION:${this.escapeIcs(location)}`,
+      'STATUS:CONFIRMED',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+
+    const filename = `${event.title.replace(/[^a-zA-Z0-9]/g, '_')}.ics`;
+
+    return { filename, content: icsContent };
+  }
+
+  // Format date for iCal (YYYYMMDDTHHmmssZ)
+  private toCalendarDate(date: Date): string {
+    return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  }
+
+  // Escape special characters for .ics format
+  private escapeIcs(text: string): string {
+    return text
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\n/g, '\\n');
+  }
+
   // Get WhatsApp share link for an event
   async getWhatsAppShareLink(id: string) {
     const event = await this.prisma.event.findUnique({
@@ -400,5 +531,173 @@ export class EventsService {
   // Get WhatsApp support link
   async getWhatsAppSupportLink(subject?: string, orderId?: string) {
     return this.whatsAppProvider.generateSupportLink(subject, orderId);
+  }
+
+  /**
+   * Get diaspora-friendly events — curated picks for gifting/remote attendance
+   * Prioritizes: cultural events, festivals, concerts, events with gift-friendly pricing
+   */
+  async getDiasporaPicks(limit = 8) {
+    const events = await this.prisma.event.findMany({
+      where: {
+        status: 'PUBLISHED',
+        date: { gte: new Date() },
+        category: { in: ['MUSIC', 'FESTIVAL', 'ARTS', 'COMEDY', 'CONFERENCE'] as any },
+      },
+      include: {
+        organizer: {
+          select: {
+            id: true,
+            businessName: true,
+            logo: true,
+          },
+        },
+        ticketTypes: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            quantity: true,
+            sold: true,
+          },
+        },
+      },
+      orderBy: [
+        { isFeatured: 'desc' },
+        { date: 'asc' },
+      ],
+      take: limit,
+    });
+
+    return events.map((event) => ({
+      ...event,
+      ticketTypes: event.ticketTypes.map((t: any) => ({
+        ...t,
+        available: t.quantity - t.sold,
+      })),
+      minPrice: event.ticketTypes.length > 0
+        ? Math.min(...event.ticketTypes.map((t: any) => t.price))
+        : 0,
+      maxPrice: event.ticketTypes.length > 0
+        ? Math.max(...event.ticketTypes.map((t: any) => t.price))
+        : 0,
+      ticketsAvailable: event.ticketTypes.reduce(
+        (sum: number, t: any) => sum + (t.quantity - t.sold),
+        0,
+      ),
+    }));
+  }
+
+  /**
+   * Get event recommendations for a user
+   * Based on: purchase history categories, saved events, and popular events
+   */
+  async getRecommendations(userId?: string, limit = 8) {
+    let preferredCategories: string[] = [];
+
+    if (userId) {
+      // Get categories from user's past tickets
+      const userTickets = await this.prisma.ticket.findMany({
+        where: { userId, status: { in: ['VALID', 'USED'] } },
+        select: { event: { select: { category: true } } },
+        take: 50,
+      });
+
+      const categoryCount: Record<string, number> = {};
+      for (const ticket of userTickets) {
+        const cat = ticket.event.category;
+        categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+      }
+
+      preferredCategories = Object.entries(categoryCount)
+        .sort((a, b) => b[1] - a[1])
+        .map(([cat]) => cat);
+
+      // Include categories from saved events
+      const savedEvents = await this.prisma.savedEvent.findMany({
+        where: { userId },
+        select: { event: { select: { category: true } } },
+        take: 20,
+      });
+
+      for (const saved of savedEvents) {
+        const cat = saved.event.category;
+        if (!preferredCategories.includes(cat)) {
+          preferredCategories.push(cat);
+        }
+      }
+    }
+
+    const where: any = {
+      status: 'PUBLISHED',
+      date: { gte: new Date() },
+    };
+
+    if (preferredCategories.length > 0) {
+      where.category = { in: preferredCategories as any };
+    }
+
+    // Exclude events user already has tickets for
+    if (userId) {
+      const userEventIds = await this.prisma.ticket.findMany({
+        where: { userId },
+        select: { eventId: true },
+        distinct: ['eventId'],
+      });
+      if (userEventIds.length > 0) {
+        where.id = { notIn: userEventIds.map((t: any) => t.eventId) };
+      }
+    }
+
+    const events = await this.prisma.event.findMany({
+      where,
+      include: {
+        organizer: { select: { id: true, businessName: true, logo: true } },
+        ticketTypes: {
+          select: { id: true, name: true, price: true, quantity: true, sold: true },
+        },
+      },
+      orderBy: [{ isFeatured: 'desc' }, { date: 'asc' }],
+      take: limit,
+    });
+
+    // Backfill with popular events if not enough
+    if (events.length < limit && userId) {
+      const existingIds = events.map((e) => e.id);
+      const backfill = await this.prisma.event.findMany({
+        where: {
+          status: 'PUBLISHED',
+          date: { gte: new Date() },
+          id: { notIn: existingIds },
+        },
+        include: {
+          organizer: { select: { id: true, businessName: true, logo: true } },
+          ticketTypes: {
+            select: { id: true, name: true, price: true, quantity: true, sold: true },
+          },
+        },
+        orderBy: { date: 'asc' },
+        take: limit - events.length,
+      });
+      events.push(...backfill);
+    }
+
+    return events.map((event: any) => ({
+      ...event,
+      ticketTypes: event.ticketTypes.map((t: any) => ({
+        ...t,
+        available: t.quantity - t.sold,
+      })),
+      minPrice: event.ticketTypes.length > 0
+        ? Math.min(...event.ticketTypes.map((t: any) => t.price))
+        : 0,
+      maxPrice: event.ticketTypes.length > 0
+        ? Math.max(...event.ticketTypes.map((t: any) => t.price))
+        : 0,
+      ticketsAvailable: event.ticketTypes.reduce(
+        (sum: number, t: any) => sum + (t.quantity - t.sold),
+        0,
+      ),
+    }));
   }
 }

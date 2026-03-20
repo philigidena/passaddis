@@ -177,6 +177,67 @@ export class WhatsAppProvider {
   }
 
   /**
+   * Generate WhatsApp link to send a gift ticket
+   */
+  generateGiftTicketLink(
+    recipientPhone: string,
+    senderName: string,
+    eventTitle: string,
+    eventDate: Date,
+    ticketCount: number,
+    giftMessage?: string,
+  ): WhatsAppShareLink {
+    const formattedDate = eventDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    let message = `🎁 *Gift from ${senderName}!*\n\n` +
+      `You've been gifted ${ticketCount} ticket(s) for:\n` +
+      `*${eventTitle}*\n` +
+      `📅 ${formattedDate}\n\n`;
+
+    if (giftMessage) {
+      message += `💬 "${giftMessage}"\n\n`;
+    }
+
+    message += `Open PassAddis to view your tickets: ${this.appUrl}/tickets`;
+
+    const formattedPhone = this.formatPhone(recipientPhone);
+    return {
+      url: `${this.baseUrl}/${formattedPhone}?text=${encodeURIComponent(message)}`,
+      message,
+    };
+  }
+
+  /**
+   * Generate WhatsApp link to send wallet credit
+   */
+  generateWalletGiftLink(
+    recipientPhone: string,
+    senderName: string,
+    amount: number,
+    message?: string,
+  ): WhatsAppShareLink {
+    let text = `🎁 *${senderName} sent you ${amount} ETB on PassAddis!*\n\n` +
+      `Use it to buy tickets or shop for merch.\n`;
+
+    if (message) {
+      text += `\n💬 "${message}"\n`;
+    }
+
+    text += `\nOpen PassAddis: ${this.appUrl}`;
+
+    const formattedPhone = this.formatPhone(recipientPhone);
+    return {
+      url: `${this.baseUrl}/${formattedPhone}?text=${encodeURIComponent(text)}`,
+      message: text,
+    };
+  }
+
+  /**
    * Format phone number for WhatsApp
    * Removes spaces, dashes, and leading zeros for Ethiopian numbers
    */

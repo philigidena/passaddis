@@ -140,6 +140,11 @@ export class TicketsService {
     const serviceFee = Math.round(subtotal * 0.05);
     const total = subtotal + serviceFee;
 
+    // Validate gift fields
+    if (dto.isGift && !dto.recipientPhone) {
+      throw new BadRequestException('Recipient phone is required for gift tickets');
+    }
+
     // Create order with ticket metadata (tickets created AFTER payment)
     const orderNumber = `PA${Date.now().toString(36).toUpperCase()}`;
 
@@ -151,6 +156,10 @@ export class TicketsService {
         serviceFee,
         total,
         status: 'PENDING',
+        isGift: dto.isGift || false,
+        recipientPhone: dto.recipientPhone,
+        recipientName: dto.recipientName,
+        giftMessage: dto.giftMessage,
         // Store ticket details - tickets will be created after payment
         ticketMetadata: {
           eventId,
@@ -159,7 +168,7 @@ export class TicketsService {
       },
     });
 
-    console.log(`📝 Order ${order.orderNumber} created - awaiting payment for ${ticketCreations.reduce((sum, t) => sum + t.quantity, 0)} tickets`);
+    console.log(`📝 Order ${order.orderNumber} created${dto.isGift ? ' (GIFT)' : ''} - awaiting payment for ${ticketCreations.reduce((sum, t) => sum + t.quantity, 0)} tickets`);
 
     return {
       order,
@@ -212,6 +221,25 @@ export class TicketsService {
       throw new NotFoundException('Event no longer exists');
     }
 
+    // For gift orders, find or create the recipient user
+    let ticketOwnerId = order.userId;
+    if (order.isGift && order.recipientPhone) {
+      let recipient = await this.prisma.user.findUnique({
+        where: { phone: order.recipientPhone },
+      });
+      if (!recipient) {
+        // Auto-create a basic account for the recipient
+        recipient = await this.prisma.user.create({
+          data: {
+            phone: order.recipientPhone,
+            name: order.recipientName || null,
+          },
+        });
+        console.log(`🎁 Created account for gift recipient: ${order.recipientPhone}`);
+      }
+      ticketOwnerId = recipient.id;
+    }
+
     // Create tickets and update sold counts in transaction
     const createdTickets = await this.prisma.$transaction(async (tx) => {
       const tickets = [];
@@ -230,13 +258,13 @@ export class TicketsService {
           );
         }
 
-        // Create tickets
+        // Create tickets — assigned to recipient for gifts, buyer otherwise
         for (let i = 0; i < item.quantity; i++) {
           const qrCode = this.generateQrCode();
           const ticket = await tx.ticket.create({
             data: {
               qrCode,
-              userId: order.userId,
+              userId: ticketOwnerId,
               eventId,
               ticketTypeId: item.ticketTypeId,
               orderId: order.id,
@@ -255,9 +283,9 @@ export class TicketsService {
       return tickets;
     });
 
-    console.log(`✅ Created ${createdTickets.length} tickets for paid order ${order.orderNumber}`);
+    console.log(`✅ Created ${createdTickets.length} tickets for paid order ${order.orderNumber}${order.isGift ? ` (GIFT to ${order.recipientPhone})` : ''}`);
 
-    // Send confirmation email if user has email
+    // Send confirmation email to buyer
     if (order.user?.email) {
       const ticketUrl = `${this.frontendUrl}/tickets`;
       this.emailProvider.sendTicketConfirmation(
@@ -269,6 +297,16 @@ export class TicketsService {
         ticketUrl,
       ).catch((error) => {
         console.error(`Failed to send ticket confirmation email:`, error);
+      });
+    }
+
+    // For gift orders, notify the recipient via SMS
+    if (order.isGift && order.recipientPhone) {
+      const senderName = order.user?.name || 'Someone';
+      const giftMsg = order.giftMessage ? `\nMessage: "${order.giftMessage}"` : '';
+      const smsMessage = `🎁 ${senderName} sent you ${createdTickets.length} ticket(s) for "${event.title}"!${giftMsg}\nOpen PassAddis to view your tickets.`;
+      this.smsProvider.sendSms(order.recipientPhone, smsMessage).catch((error) => {
+        console.error(`Failed to send gift notification SMS:`, error);
       });
     }
 

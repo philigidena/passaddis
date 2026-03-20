@@ -1,14 +1,18 @@
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Ticket, Star } from 'lucide-react';
+import { Calendar, MapPin, Ticket, Star, Heart } from 'lucide-react';
 import type { Event } from '@/types';
+import { useCurrency } from '@/hooks/useCurrency';
 import clsx from 'clsx';
 
 interface EventCardProps {
   event: Event;
   className?: string;
+  isSaved?: boolean;
+  onToggleSave?: (eventId: string) => void;
 }
 
-export function EventCard({ event, className }: EventCardProps) {
+export function EventCard({ event, className, isSaved, onToggleSave }: EventCardProps) {
+  const { formatPrice } = useCurrency();
   const eventDate = new Date(event.date);
   const formattedDate = eventDate.toLocaleDateString('en-US', {
     month: 'short',
@@ -25,8 +29,8 @@ export function EventCard({ event, className }: EventCardProps) {
     event.minPrice === 0
       ? 'Free'
       : event.minPrice === event.maxPrice
-        ? `${event.minPrice} ETB`
-        : `${event.minPrice} - ${event.maxPrice} ETB`;
+        ? formatPrice(event.minPrice!)
+        : `${formatPrice(event.minPrice!)} - ${formatPrice(event.maxPrice!)}`;
 
   return (
     <Link
@@ -50,9 +54,32 @@ export function EventCard({ event, className }: EventCardProps) {
           {event.category}
         </span>
 
+        {/* Save Button */}
+        {onToggleSave && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleSave(event.id);
+            }}
+            className={clsx(
+              'absolute top-3 right-3 z-10 p-2 rounded-full backdrop-blur-sm transition-all duration-200',
+              isSaved
+                ? 'bg-red-500/90 text-white hover:bg-red-600'
+                : 'bg-black/40 text-white/80 hover:bg-black/60 hover:text-white'
+            )}
+            title={isSaved ? 'Remove from saved' : 'Save event'}
+          >
+            <Heart className={clsx('w-4 h-4', isSaved && 'fill-current')} />
+          </button>
+        )}
+
         {/* Featured Badge */}
         {event.isFeatured && (
-          <span className="absolute top-3 right-3 bg-accent text-dark-bg text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1">
+          <span className={clsx(
+            'absolute top-3 bg-accent text-dark-bg text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1',
+            onToggleSave ? 'right-14' : 'right-3'
+          )}>
             <Star className="w-3 h-3" />
             Featured
           </span>

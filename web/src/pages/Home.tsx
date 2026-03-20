@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Ticket, Shield, Smartphone, Calendar, Sparkles, Play, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowRight, Ticket, Shield, Smartphone, Calendar, Sparkles, Play, MapPin, ChevronLeft, ChevronRight, Globe, Gift } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { EventCard } from '@/components/events/EventCard';
 import { useEvents } from '@/hooks/useEvents';
+import { useSavedEvents } from '@/hooks/useSavedEvents';
+import { useAuth } from '@/context/AuthContext';
+import { eventsApi } from '@/lib/api';
+import type { Event } from '@/types';
 
 // Hero carousel slides configuration
 const heroSlides = [
@@ -51,8 +55,25 @@ const heroSlides = [
 
 export function HomePage() {
   const { events, isLoading, error } = useEvents({ featured: true });
+  const { isEventSaved, toggleSave } = useSavedEvents();
+  const { isAuthenticated } = useAuth();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [diasporaPicks, setDiasporaPicks] = useState<Event[]>([]);
+  const [isDiasporaLoading, setIsDiasporaLoading] = useState(true);
+
+  // Fetch diaspora picks
+  useEffect(() => {
+    const fetchDiasporaPicks = async () => {
+      setIsDiasporaLoading(true);
+      const response = await eventsApi.getDiasporaPicks(6);
+      if (response.data) {
+        setDiasporaPicks(response.data);
+      }
+      setIsDiasporaLoading(false);
+    };
+    fetchDiasporaPicks();
+  }, []);
 
   // Auto-advance carousel
   useEffect(() => {
@@ -443,7 +464,11 @@ export function HomePage() {
                 <div className="flex gap-6 px-4 sm:px-6 lg:px-8" style={{ paddingLeft: 'max(1rem, calc((100vw - 80rem) / 2 + 2rem))' }}>
                   {events.slice(0, 10).map((event) => (
                     <div key={event.id} className="flex-shrink-0 w-[300px] sm:w-[340px]">
-                      <EventCard event={event} />
+                      <EventCard
+                        event={event}
+                        isSaved={isEventSaved(event.id)}
+                        onToggleSave={isAuthenticated ? toggleSave : undefined}
+                      />
                     </div>
                   ))}
                   {/* View All Card */}
@@ -467,6 +492,73 @@ export function HomePage() {
           )}
         </div>
       </section>
+
+      {/* Diaspora Picks Section */}
+      {diasporaPicks.length > 0 && (
+        <section className="py-24 lg:py-32 bg-dark-card relative overflow-hidden">
+          {/* Background */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-0 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
+          </div>
+
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            {/* Section Header */}
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-12">
+              <div>
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 border border-accent/20 text-accent text-sm font-medium mb-6">
+                  <Globe className="w-4 h-4" />
+                  For the Diaspora
+                </span>
+                <h2 className="text-4xl sm:text-5xl font-black text-white leading-tight">
+                  Gift an
+                  <span className="block text-gradient">Experience</span>
+                </h2>
+                <p className="text-white/50 mt-4 max-w-lg">
+                  Curated events perfect for gifting to family and friends back home. Buy tickets or send wallet credit from anywhere in the world.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <Link
+                  to="/wallet"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-accent/10 border border-accent/20 text-accent font-medium text-sm transition-all duration-300 hover:bg-accent/20"
+                >
+                  <Gift className="w-4 h-4" />
+                  Send Gift Credit
+                </Link>
+                <Link
+                  to="/events"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white/5 border border-white/10 text-white/70 font-medium text-sm transition-all duration-300 hover:bg-white/10"
+                >
+                  View All
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Events Grid */}
+            {isDiasporaLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="relative">
+                  <div className="w-12 h-12 border-4 border-white/10 rounded-full" />
+                  <div className="absolute inset-0 w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {diasporaPicks.map((event) => (
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    isSaved={isEventSaved(event.id)}
+                    onToggleSave={isAuthenticated ? toggleSave : undefined}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Trust Section - Modern Design */}
       <section className="py-32 bg-dark-card relative overflow-hidden">

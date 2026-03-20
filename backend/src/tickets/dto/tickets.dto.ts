@@ -3,6 +3,8 @@ import {
   IsNotEmpty,
   IsNumber,
   IsArray,
+  IsOptional,
+  IsBoolean,
   ValidateNested,
   Min,
   Max,
@@ -29,6 +31,23 @@ export class PurchaseTicketsDto {
   @ValidateNested({ each: true })
   @Type(() => TicketPurchaseItemDto)
   tickets: TicketPurchaseItemDto[];
+
+  // Gift ticket fields
+  @IsBoolean()
+  @IsOptional()
+  isGift?: boolean;
+
+  @IsString()
+  @IsOptional()
+  recipientPhone?: string;
+
+  @IsString()
+  @IsOptional()
+  recipientName?: string;
+
+  @IsString()
+  @IsOptional()
+  giftMessage?: string;
 }
 
 export class ValidateTicketDto {

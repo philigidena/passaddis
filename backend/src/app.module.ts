@@ -15,6 +15,15 @@ import { OrganizerModule } from './organizer/organizer.module';
 import { ShopOwnerModule } from './shop-owner/shop-owner.module';
 import { PromoModule } from './promo/promo.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
+import { SavedEventsModule } from './saved-events/saved-events.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { CurrencyModule } from './currency/currency.module';
+import { WalletModule } from './wallet/wallet.module';
+import { ReferralsModule } from './referrals/referrals.module';
+import { FollowsModule } from './follows/follows.module';
+import { ResaleModule } from './resale/resale.module';
+import { RatingsModule } from './ratings/ratings.module';
+import { DonationsModule } from './donations/donations.module';
 import { SharedModule } from './shared/shared.module';
 
 @Module({
@@ -53,6 +62,15 @@ import { SharedModule } from './shared/shared.module';
     ShopOwnerModule,
     PromoModule,
     WaitlistModule,
+    SavedEventsModule,
+    NotificationsModule,
+    CurrencyModule,
+    WalletModule,
+    ReferralsModule,
+    FollowsModule,
+    ResaleModule,
+    RatingsModule,
+    DonationsModule,
   ],
   controllers: [AppController],
   providers: [

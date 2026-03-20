@@ -10,6 +10,9 @@ import {
   Minus,
   Plus,
   Ticket,
+  Gift,
+  CreditCard,
+  Smartphone,
   ArrowLeft,
   Loader2,
   Zap,
@@ -19,7 +22,8 @@ import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/Button';
 import { useEvent } from '@/hooks/useEvents';
 import { useAuth } from '@/context/AuthContext';
-import { ticketsApi, paymentsApi, waitlistApi } from '@/lib/api';
+import { useSavedEvents } from '@/hooks/useSavedEvents';
+import { ticketsApi, paymentsApi, waitlistApi, eventsApi } from '@/lib/api';
 import type { TicketType } from '@/types';
 import clsx from 'clsx';
 
@@ -41,10 +45,33 @@ export function EventDetailPage() {
   const { isAuthenticated } = useAuth();
   const { event, isLoading, error } = useEvent(id);
 
+  const { isEventSaved, toggleSave } = useSavedEvents();
   const [ticketSelection, setTicketSelection] = useState<TicketSelection>({});
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [waitlistStatus, setWaitlistStatus] = useState<WaitlistStatus>({});
+  const [paymentMethod, setPaymentMethod] = useState<'TELEBIRR' | 'STRIPE'>('TELEBIRR');
+  const [isGift, setIsGift] = useState(false);
+  const [giftRecipientPhone, setGiftRecipientPhone] = useState('');
+  const [giftRecipientName, setGiftRecipientName] = useState('');
+  const [giftMessage, setGiftMessage] = useState('');
+  const [showCalendarMenu, setShowCalendarMenu] = useState(false);
+  const [calendarLinks, setCalendarLinks] = useState<{
+    googleCalendarUrl: string;
+    outlookUrl: string;
+    yahooUrl: string;
+    icsUrl: string;
+  } | null>(null);
+
+  const handleAddToCalendar = async () => {
+    if (!calendarLinks && id) {
+      const response = await eventsApi.getCalendarLinks(id);
+      if (response.data) {
+        setCalendarLinks(response.data);
+      }
+    }
+    setShowCalendarMenu(!showCalendarMenu);
+  };
 
   const handleJoinWaitlist = async (ticketTypeId: string) => {
     if (!isAuthenticated) {
@@ -117,7 +144,11 @@ export function EventDetailPage() {
         .filter(([_, qty]) => qty > 0)
         .map(([ticketTypeId, quantity]) => ({ ticketTypeId, quantity }));
 
-      const orderResponse = await ticketsApi.purchase(id!, tickets);
+      const giftData = isGift
+        ? { isGift: true, recipientPhone: giftRecipientPhone, recipientName: giftRecipientName || undefined, giftMessage: giftMessage || undefined }
+        : undefined;
+
+      const orderResponse = await ticketsApi.purchase(id!, tickets, giftData);
 
       if (orderResponse.error) {
         setPurchaseError(orderResponse.error);
@@ -127,8 +158,8 @@ export function EventDetailPage() {
 
       const order = orderResponse.data!.order;
 
-      // Initiate payment
-      const paymentResponse = await paymentsApi.initiate(order.id, 'TELEBIRR');
+      // Initiate payment with selected method
+      const paymentResponse = await paymentsApi.initiate(order.id, paymentMethod);
 
       if (paymentResponse.error) {
         setPurchaseError(paymentResponse.error);
@@ -222,8 +253,22 @@ export function EventDetailPage() {
           <button className="glass p-3 rounded-full text-white hover:bg-white/20 transition-colors">
             <Share2 className="w-5 h-5" />
           </button>
-          <button className="glass p-3 rounded-full text-white hover:bg-white/20 transition-colors">
-            <Heart className="w-5 h-5" />
+          <button
+            onClick={() => {
+              if (!isAuthenticated) {
+                navigate('/signin');
+                return;
+              }
+              if (id) toggleSave(id);
+            }}
+            className={clsx(
+              'glass p-3 rounded-full transition-colors',
+              id && isEventSaved(id)
+                ? 'bg-red-500/80 text-white hover:bg-red-600'
+                : 'text-white hover:bg-white/20'
+            )}
+          >
+            <Heart className={clsx('w-5 h-5', id && isEventSaved(id) && 'fill-current')} />
           </button>
         </div>
       </div>
@@ -273,6 +318,52 @@ export function EventDetailPage() {
                     <p className="text-white/60 text-sm">{event.address}, {event.city}</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Add to Calendar */}
+              <div className="mb-8 relative">
+                <button
+                  onClick={handleAddToCalendar}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-colors text-sm font-medium"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Add to Calendar
+                </button>
+                {showCalendarMenu && calendarLinks && (
+                  <div className="absolute top-12 left-0 z-20 bg-dark-card border border-white/10 rounded-xl shadow-lg py-2 min-w-[200px]">
+                    <a
+                      href={calendarLinks.googleCalendarUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block px-4 py-2.5 text-white/80 hover:bg-white/5 hover:text-white transition-colors text-sm"
+                    >
+                      Google Calendar
+                    </a>
+                    <a
+                      href={calendarLinks.outlookUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block px-4 py-2.5 text-white/80 hover:bg-white/5 hover:text-white transition-colors text-sm"
+                    >
+                      Outlook
+                    </a>
+                    <a
+                      href={calendarLinks.yahooUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block px-4 py-2.5 text-white/80 hover:bg-white/5 hover:text-white transition-colors text-sm"
+                    >
+                      Yahoo Calendar
+                    </a>
+                    <a
+                      href={calendarLinks.icsUrl}
+                      download
+                      className="block px-4 py-2.5 text-white/80 hover:bg-white/5 hover:text-white transition-colors text-sm"
+                    >
+                      Download .ics File
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* Description */}
@@ -352,21 +443,113 @@ export function EventDetailPage() {
                 </div>
               )}
 
+              {/* Payment Method Selector */}
+              {isAuthenticated && totalTickets > 0 && (
+                <div className="mb-4">
+                  <p className="text-white/40 text-xs mb-2">Payment Method</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setPaymentMethod('TELEBIRR')}
+                      className={clsx(
+                        'flex items-center justify-center gap-2 py-2.5 rounded-xl border transition-all text-sm font-medium',
+                        paymentMethod === 'TELEBIRR'
+                          ? 'bg-primary/10 border-primary/30 text-primary'
+                          : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                      )}
+                    >
+                      <Smartphone className="w-4 h-4" />
+                      Telebirr
+                    </button>
+                    <button
+                      onClick={() => setPaymentMethod('STRIPE')}
+                      className={clsx(
+                        'flex items-center justify-center gap-2 py-2.5 rounded-xl border transition-all text-sm font-medium',
+                        paymentMethod === 'STRIPE'
+                          ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400'
+                          : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                      )}
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      Card (Visa/MC)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Gift Toggle */}
+              {isAuthenticated && totalTickets > 0 && (
+                <div className="mb-4">
+                  <button
+                    onClick={() => setIsGift(!isGift)}
+                    className={clsx(
+                      'w-full flex items-center justify-center gap-2 py-3 rounded-xl border transition-all text-sm font-medium',
+                      isGift
+                        ? 'bg-pink-500/10 border-pink-500/30 text-pink-400'
+                        : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                    )}
+                  >
+                    <Gift className="w-4 h-4" />
+                    {isGift ? 'Sending as Gift' : 'Buy as Gift'}
+                  </button>
+
+                  {isGift && (
+                    <div className="mt-3 space-y-3 p-4 bg-pink-500/5 border border-pink-500/10 rounded-xl">
+                      <div>
+                        <label className="text-white/60 text-xs mb-1 block">Recipient Phone *</label>
+                        <input
+                          type="tel"
+                          value={giftRecipientPhone}
+                          onChange={(e) => setGiftRecipientPhone(e.target.value)}
+                          placeholder="+251..."
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-white/60 text-xs mb-1 block">Recipient Name</label>
+                        <input
+                          type="text"
+                          value={giftRecipientName}
+                          onChange={(e) => setGiftRecipientName(e.target.value)}
+                          placeholder="Their name"
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-white/60 text-xs mb-1 block">Gift Message</label>
+                        <textarea
+                          value={giftMessage}
+                          onChange={(e) => setGiftMessage(e.target.value)}
+                          placeholder="Add a personal message..."
+                          rows={2}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-primary resize-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Purchase Button */}
               <Button
                 className="w-full"
                 size="lg"
                 onClick={handlePurchase}
                 isLoading={isPurchasing}
-                disabled={totalTickets === 0}
-                leftIcon={<Ticket className="w-5 h-5" />}
+                disabled={totalTickets === 0 || (isGift && !giftRecipientPhone)}
+                leftIcon={isGift ? <Gift className="w-5 h-5" /> : <Ticket className="w-5 h-5" />}
               >
-                {isAuthenticated ? 'Purchase Tickets' : 'Sign In to Purchase'}
+                {!isAuthenticated
+                  ? 'Sign In to Purchase'
+                  : isGift
+                    ? 'Send as Gift'
+                    : 'Purchase Tickets'}
               </Button>
 
               {/* Payment Info */}
               <p className="text-center text-white/40 text-xs mt-4">
-                Secure payment powered by Telebirr
+                {paymentMethod === 'STRIPE'
+                  ? 'Secure payment powered by Stripe (Visa, Mastercard, Amex)'
+                  : 'Secure payment powered by Telebirr'}
               </p>
             </div>
           </div>
