@@ -107,4 +107,29 @@ export class TicketsController {
       recipientPhone,
     );
   }
+
+  // ============== OFFLINE QR SCANNING ==============
+
+  /**
+   * Get offline-verifiable QR payload for a ticket
+   * Contains signed data that can be verified without API call
+   */
+  @Get(':id/offline-qr')
+  async getOfflineQr(
+    @CurrentUser('id') userId: string,
+    @Param('id') ticketId: string,
+  ) {
+    return this.ticketsService.getOfflineQrData(userId, ticketId);
+  }
+
+  /**
+   * Verify an offline QR payload (for gate scanning)
+   * Can work with degraded connectivity — verifies signature locally
+   */
+  @Post('verify-offline')
+  async verifyOfflineQr(
+    @Body() body: { payload: string },
+  ) {
+    return this.ticketsService.verifyOfflineTicket(body.payload);
+  }
 }

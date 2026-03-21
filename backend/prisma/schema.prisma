@@ -48,6 +48,7 @@ model User {
   referrals     Referral[]          @relation("ReferrerUser")
   eventRatings  EventRating[]
   donations     Donation[]
+  loyaltyAccount LoyaltyAccount?
 
   @@map("users")
 }
@@ -803,6 +804,7 @@ model Order {
   tickets         Ticket[]
   items           OrderItem[]
   payment         Payment?
+  insurance       TicketInsurance?
 
   @@index([userId])
   @@index([status])
@@ -1072,4 +1074,181 @@ model Donation {
   @@index([eventId])
   @@index([userId])
   @@map("donations")
+}
+
+// ============== VENUE MANAGEMENT ==============
+
+model Venue {
+  id          String   @id @default(uuid())
+  name        String
+  address     String
+  city        String   @default("Addis Ababa")
+  latitude    Float?
+  longitude   Float?
+  capacity    Int?
+  description String?
+  imageUrl    String?
+  gallery     Json?    // Array of image URLs
+  amenities   Json?    // ["parking", "wifi", "accessible", "food_court"]
+  contactPhone String?
+  contactEmail String?
+  website     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([city])
+  @@map("venues")
+}
+
+// ============== LOYALTY / REWARDS PROGRAM ==============
+
+model LoyaltyAccount {
+  id            String   @id @default(uuid())
+  points        Int      @default(0)
+  lifetimePoints Int     @default(0)
+  tier          LoyaltyTier @default(BRONZE)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String   @unique
+
+  transactions  LoyaltyTransaction[]
+
+  @@map("loyalty_accounts")
+}
+
+model LoyaltyTransaction {
+  id          String              @id @default(uuid())
+  type        LoyaltyTransactionType
+  points      Int                 // Positive = earned, negative = redeemed
+  description String
+  reference   String?             // Order ID, event ID, etc.
+  createdAt   DateTime            @default(now())
+
+  account     LoyaltyAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId   String
+
+  @@index([accountId, createdAt])
+  @@map("loyalty_transactions")
+}
+
+enum LoyaltyTier {
+  BRONZE      // 0-499 lifetime points
+  SILVER      // 500-1999 lifetime points
+  GOLD        // 2000-4999 lifetime points
+  PLATINUM    // 5000+ lifetime points
+}
+
+enum LoyaltyTransactionType {
+  PURCHASE_EARN   // Points earned from ticket/shop purchase
+  REFERRAL_EARN   // Points earned from referral
+  REVIEW_EARN     // Points earned from leaving a review
+  CHECKIN_EARN    // Points earned from checking in
+  REDEMPTION      // Points spent for discount
+  EXPIRY          // Points expired
+  BONUS           // Promotional bonus points
+}
+
+// ============== TICKET INSURANCE ==============
+
+model TicketInsurance {
+  id            String              @id @default(uuid())
+  premium       Float               // Cost of insurance
+  coverageAmount Float              // Max refund amount
+  status        InsuranceStatus     @default(ACTIVE)
+  claimedAt     DateTime?
+  claimReason   String?
+  refundedAmount Float?
+  createdAt     DateTime            @default(now())
+
+  order         Order               @relation(fields: [orderId], references: [id])
+  orderId       String              @unique
+  userId        String
+
+  @@index([userId])
+  @@map("ticket_insurance")
+}
+
+enum InsuranceStatus {
+  ACTIVE        // Insurance purchased, not yet claimed
+  CLAIMED       // Claim submitted
+  REFUNDED      // Refund processed
+  EXPIRED       // Event passed without claim
+  VOID          // Insurance voided (e.g., ticket used)
+}
+
+// ============== CORPORATE / B2B INVOICING ==============
+
+model CorporateAccount {
+  id            String   @id @default(uuid())
+  companyName   String
+  tinNumber     String?  // Tax ID
+  contactName   String
+  contactEmail  String
+  contactPhone  String
+  billingAddress String?
+  creditLimit   Float    @default(0)
+  paymentTerms  Int      @default(30) // Net-30 days
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  userId        String   @unique
+  invoices      Invoice[]
+
+  @@map("corporate_accounts")
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique // e.g., INV-2026-0001
+  status        InvoiceStatus @default(DRAFT)
+  subtotal      Float
+  tax           Float         @default(0)
+  total         Float
+  dueDate       DateTime
+  paidAt        DateTime?
+  notes         String?
+  items         Json          // Array of line items
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  account       CorporateAccount @relation(fields: [accountId], references: [id])
+  accountId     String
+  orderId       String?
+
+  @@index([accountId])
+  @@index([status])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// ============== CUSTOM BRANDED EVENT PAGES ==============
+
+model EventBranding {
+  id              String   @id @default(uuid())
+  primaryColor    String   @default("#00b894")
+  secondaryColor  String   @default("#6c5ce7")
+  backgroundColor String   @default("#0a0a0f")
+  fontFamily      String?
+  logoUrl         String?
+  bannerUrl       String?
+  customCss       String?  // Additional CSS overrides
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  eventId         String   @unique
+  organizerId     String
+
+  @@map("event_brandings")
 }

@@ -74,6 +74,63 @@ export class TicketsService {
     return `PA-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
   }
 
+  /**
+   * Generate a signed QR code payload for offline verification
+   * Format: ticketId|eventId|ticketTypeId|userId|timestamp|signature
+   * The signature is HMAC-SHA256 of the data, allowing offline verification
+   */
+  generateOfflineQrPayload(ticket: {
+    id: string;
+    qrCode: string;
+    eventId: string;
+    ticketTypeId: string;
+    userId: string;
+  }): string {
+    const secret = this.configService.get<string>('QR_SIGNING_SECRET') || this.configService.get<string>('JWT_SECRET') || 'passaddis-qr-secret';
+    const timestamp = Math.floor(Date.now() / 1000);
+    const data = `${ticket.qrCode}|${ticket.eventId}|${ticket.ticketTypeId}|${ticket.userId}|${timestamp}`;
+    const signature = crypto
+      .createHmac('sha256', secret)
+      .update(data)
+      .digest('hex')
+      .substring(0, 16); // Short signature for QR readability
+    return `${data}|${signature}`;
+  }
+
+  /**
+   * Verify an offline QR code payload
+   * Returns the parsed ticket data if valid, null if signature is invalid
+   */
+  verifyOfflineQrPayload(payload: string): {
+    qrCode: string;
+    eventId: string;
+    ticketTypeId: string;
+    userId: string;
+    timestamp: number;
+    valid: boolean;
+    expired: boolean;
+  } | null {
+    const parts = payload.split('|');
+    if (parts.length !== 6) return null;
+
+    const [qrCode, eventId, ticketTypeId, userId, timestampStr, signature] = parts;
+    const timestamp = parseInt(timestampStr, 10);
+    const secret = this.configService.get<string>('QR_SIGNING_SECRET') || this.configService.get<string>('JWT_SECRET') || 'passaddis-qr-secret';
+
+    const data = `${qrCode}|${eventId}|${ticketTypeId}|${userId}|${timestampStr}`;
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(data)
+      .digest('hex')
+      .substring(0, 16);
+
+    const valid = signature === expectedSignature;
+    // QR payload expires after 24 hours
+    const expired = (Date.now() / 1000 - timestamp) > 86400;
+
+    return { qrCode, eventId, ticketTypeId, userId, timestamp, valid, expired };
+  }
+
   // Purchase tickets
   async purchaseTickets(userId: string, dto: PurchaseTicketsDto) {
     const { eventId, tickets } = dto;
@@ -911,6 +968,89 @@ export class TicketsService {
       ticketId: ticket.id,
       whatsappUrl: sendLink.url,
       message: sendLink.message,
+    };
+  }
+
+  // ============== OFFLINE QR SCANNING ==============
+
+  /**
+   * Get offline-verifiable QR data for a ticket
+   */
+  async getOfflineQrData(userId: string, ticketId: string) {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: {
+        id: true, qrCode: true, status: true,
+        eventId: true, ticketTypeId: true, userId: true,
+        event: { select: { title: true, date: true, venue: true } },
+        ticketType: { select: { name: true } },
+      },
+    });
+
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (ticket.userId !== userId) throw new ForbiddenException('You do not own this ticket');
+    if (ticket.status !== 'VALID') throw new BadRequestException('Ticket is not valid');
+
+    const payload = this.generateOfflineQrPayload({
+      id: ticket.id,
+      qrCode: ticket.qrCode,
+      eventId: ticket.eventId,
+      ticketTypeId: ticket.ticketTypeId,
+      userId: ticket.userId,
+    });
+
+    return {
+      ticketId: ticket.id,
+      qrCode: ticket.qrCode,
+      offlinePayload: payload,
+      event: ticket.event,
+      ticketType: ticket.ticketType.name,
+      expiresIn: '24 hours',
+    };
+  }
+
+  /**
+   * Verify an offline QR payload
+   */
+  async verifyOfflineTicket(payload: string) {
+    const result = this.verifyOfflineQrPayload(payload);
+
+    if (!result) {
+      return { valid: false, error: 'Invalid QR code format' };
+    }
+
+    if (!result.valid) {
+      return { valid: false, error: 'Invalid signature — ticket may be forged' };
+    }
+
+    if (result.expired) {
+      return { valid: false, error: 'QR code expired — ask attendee to refresh', qrCode: result.qrCode };
+    }
+
+    // If online, also check ticket status in DB
+    try {
+      const ticket = await this.prisma.ticket.findUnique({
+        where: { qrCode: result.qrCode },
+        select: { status: true, usedAt: true },
+      });
+
+      if (ticket && ticket.status === 'USED') {
+        return { valid: false, error: 'Ticket already used', usedAt: ticket.usedAt, qrCode: result.qrCode };
+      }
+
+      if (ticket && ticket.status !== 'VALID') {
+        return { valid: false, error: `Ticket status: ${ticket.status}`, qrCode: result.qrCode };
+      }
+    } catch {
+      // If DB is unreachable, trust the signature (offline mode)
+    }
+
+    return {
+      valid: true,
+      qrCode: result.qrCode,
+      eventId: result.eventId,
+      ticketTypeId: result.ticketTypeId,
+      signedAt: new Date(result.timestamp * 1000).toISOString(),
     };
   }
 }

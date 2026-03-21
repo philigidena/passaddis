@@ -533,6 +533,62 @@ export class EventsService {
     return this.whatsAppProvider.generateSupportLink(subject, orderId);
   }
 
+  // Get Open Graph data for social sharing
+  async getOpenGraphData(id: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id },
+      select: {
+        id: true, title: true, description: true, imageUrl: true,
+        date: true, venue: true, city: true,
+        ticketTypes: { select: { price: true } },
+      },
+    });
+
+    if (!event) throw new NotFoundException('Event not found');
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://passaddis.com';
+    const minPrice = event.ticketTypes.length > 0
+      ? Math.min(...event.ticketTypes.map((t: any) => t.price))
+      : 0;
+    const dateStr = new Date(event.date).toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    });
+
+    return {
+      title: event.title,
+      description: `${dateStr} at ${event.venue}, ${event.city}${minPrice > 0 ? ` | From ${minPrice} ETB` : ' | Free'}`,
+      image: event.imageUrl || `${frontendUrl}/og-image.png`,
+      url: `${frontendUrl}/events/${event.id}`,
+    };
+  }
+
+  // Get social share links
+  async getShareLinks(id: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id },
+      select: { id: true, title: true, venue: true, date: true },
+    });
+
+    if (!event) throw new NotFoundException('Event not found');
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://passaddis.com';
+    const eventUrl = `${frontendUrl}/events/${event.id}`;
+    const text = `${event.title} — ${new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${event.venue}`;
+    const encodedUrl = encodeURIComponent(eventUrl);
+    const encodedText = encodeURIComponent(text);
+
+    return {
+      eventId: event.id,
+      url: eventUrl,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      twitter: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
+      telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`,
+      whatsapp: `https://wa.me/?text=${encodeURIComponent(`${text}\n${eventUrl}`)}`,
+      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
+      copyLink: eventUrl,
+    };
+  }
+
   /**
    * Get diaspora-friendly events — curated picks for gifting/remote attendance
    * Prioritizes: cultural events, festivals, concerts, events with gift-friendly pricing

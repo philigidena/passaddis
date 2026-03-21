@@ -25,6 +25,12 @@ import { ResaleModule } from './resale/resale.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { DonationsModule } from './donations/donations.module';
 import { SharedModule } from './shared/shared.module';
+import { VenuesModule } from './venues/venues.module';
+import { LoyaltyModule } from './loyalty/loyalty.module';
+import { InsuranceModule } from './insurance/insurance.module';
+import { CorporateModule } from './corporate/corporate.module';
+import { PublicApiModule } from './public-api/public-api.module';
+import { BrandingModule } from './branding/branding.module';
 
 @Module({
   imports: [
@@ -71,6 +77,12 @@ import { SharedModule } from './shared/shared.module';
     ResaleModule,
     RatingsModule,
     DonationsModule,
+    VenuesModule,
+    LoyaltyModule,
+    InsuranceModule,
+    CorporateModule,
+    PublicApiModule,
+    BrandingModule,
   ],
   controllers: [AppController],
   providers: [

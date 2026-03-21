@@ -69,18 +69,18 @@
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 5.1 | Telegram Bot | ⬜ TODO | Event discovery, ticket purchase, QR display via Telegram |
-| 5.2 | USSD Ticketing | ⬜ TODO | Dial *XXX# to buy tickets — non-smartphone users |
-| 5.3 | Interactive Seat Maps | ⬜ TODO | SVG venue maps with click-to-select seats |
-| 5.4 | Loyalty / Rewards Program | ⬜ TODO | Points for purchases, redeem for discounts/merch |
-| 5.5 | Ticket Insurance | ⬜ TODO | Optional refund protection at checkout |
-| 5.6 | Offline QR Scanning | ⬜ TODO | Signed QR codes verifiable without API call |
-| 5.7 | Corporate / B2B Invoicing | ⬜ TODO | Invoice-based purchasing, PO numbers, TIN receipts |
-| 5.8 | Venue Management Module | ⬜ TODO | Reusable Venue model with maps, capacity, photos |
-| 5.9 | Custom Branded Event Pages | ⬜ TODO | Organizer custom colors/branding (premium feature) |
-| 5.10 | Public API | ⬜ TODO | API for partners, media sites, tourism platforms |
-| 5.11 | Social Sharing (Full) | ⬜ TODO | Facebook/Twitter/Telegram deep links, Open Graph meta |
-| 5.12 | Verified Fan / Bot Protection | ⬜ TODO | Queue system for high-demand events |
+| 5.1 | Telegram Bot | ⬜ TODO | Event discovery, ticket purchase, QR display via Telegram (needs bot token) |
+| 5.2 | USSD Ticketing | ⬜ TODO | Dial *XXX# to buy tickets (needs telecom partnership) |
+| 5.3 | Interactive Seat Maps | ⬜ TODO | SVG venue maps with click-to-select seats (complex frontend) |
+| 5.4 | Loyalty / Rewards Program | ✅ DONE | LoyaltyAccount + tiers (Bronze/Silver/Gold/Platinum) + earn/redeem points |
+| 5.5 | Ticket Insurance | ✅ DONE | TicketInsurance model, 10% premium, claim/refund flow |
+| 5.6 | Offline QR Scanning | ✅ DONE | HMAC-SHA256 signed QR payloads, 24h expiry, offline verification |
+| 5.7 | Corporate / B2B Invoicing | ✅ DONE | CorporateAccount + Invoice models, TIN support, auto invoice numbers |
+| 5.8 | Venue Management Module | ✅ DONE | Venue CRUD with capacity, amenities, geo coordinates, gallery |
+| 5.9 | Custom Branded Event Pages | ✅ DONE | EventBranding model with colors, fonts, logos, custom CSS |
+| 5.10 | Public API | ✅ DONE | Sanitized public endpoints for events, details, availability |
+| 5.11 | Social Sharing (Full) | ✅ DONE | OG meta tags, share links (FB/Twitter/Telegram/WhatsApp/LinkedIn) |
+| 5.12 | Verified Fan / Bot Protection | ⬜ TODO | Queue system for high-demand events (needs WebSocket infra) |
 
 ---
 

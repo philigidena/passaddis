@@ -78,6 +78,44 @@ export class EventsController {
     return this.eventsService.findOne(id);
   }
 
+  /**
+   * Get Open Graph meta data for social sharing
+   * Returns HTML with OG tags for crawlers (Facebook, Twitter, Telegram)
+   */
+  @Public()
+  @Get(':id/og')
+  async getOpenGraphMeta(@Param('id') id: string, @Res() res: Response) {
+    const og = await this.eventsService.getOpenGraphData(id);
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta property="og:type" content="event" />
+<meta property="og:title" content="${og.title}" />
+<meta property="og:description" content="${og.description}" />
+<meta property="og:image" content="${og.image}" />
+<meta property="og:url" content="${og.url}" />
+<meta property="og:site_name" content="PassAddis" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${og.title}" />
+<meta name="twitter:description" content="${og.description}" />
+<meta name="twitter:image" content="${og.image}" />
+<meta http-equiv="refresh" content="0;url=${og.url}" />
+</head>
+<body>Redirecting to <a href="${og.url}">${og.title}</a></body>
+</html>`;
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  }
+
+  /**
+   * Get social share links for an event (Facebook, Twitter, Telegram, WhatsApp)
+   */
+  @Public()
+  @Get(':id/share')
+  async getShareLinks(@Param('id') id: string) {
+    return this.eventsService.getShareLinks(id);
+  }
+
   @Public()
   @Get(':id/calendar')
   async getCalendarLinks(@Param('id') id: string) {
