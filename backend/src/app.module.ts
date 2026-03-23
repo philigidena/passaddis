@@ -31,6 +31,7 @@ import { InsuranceModule } from './insurance/insurance.module';
 import { CorporateModule } from './corporate/corporate.module';
 import { PublicApiModule } from './public-api/public-api.module';
 import { BrandingModule } from './branding/branding.module';
+import { PromotersModule } from './promoters/promoters.module';
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { BrandingModule } from './branding/branding.module';
     CorporateModule,
     PublicApiModule,
     BrandingModule,
+    PromotersModule,
   ],
   controllers: [AppController],
   providers: [

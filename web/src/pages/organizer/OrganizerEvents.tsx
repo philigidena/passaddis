@@ -53,6 +53,7 @@ export function OrganizerEvents() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
@@ -131,19 +132,7 @@ export function OrganizerEvents() {
       });
 
       if (response.data) {
-        setShowCreateModal(false);
-        setFormData({
-          title: '',
-          description: '',
-          venue: '',
-          address: '',
-          city: 'Addis Ababa',
-          date: '',
-          endDate: '',
-          category: 'MUSIC',
-          imageUrl: '',
-          ticketTypes: [{ name: 'General Admission', price: 0, quantity: 100 }],
-        });
+        handleCloseModal();
         loadEvents();
       } else {
         setError(response.error || 'Failed to create event');
@@ -153,6 +142,83 @@ export function OrganizerEvents() {
     } finally {
       setCreating(false);
     }
+  };
+
+  const handleEditEvent = (event: Event) => {
+    setFormData({
+      title: event.title,
+      description: event.description,
+      venue: event.venue,
+      address: event.address || '',
+      city: event.city,
+      date: new Date(event.date).toISOString().slice(0, 16),
+      endDate: event.endDate ? new Date(event.endDate).toISOString().slice(0, 16) : '',
+      category: event.category,
+      imageUrl: event.imageUrl || '',
+      ticketTypes: event.ticketTypes?.map((tt: any) => ({
+        name: tt.name,
+        price: tt.price,
+        quantity: tt.quantity,
+      })) || [{ name: 'General Admission', price: 0, quantity: 100 }],
+    });
+    setEditingEvent(event);
+    setShowCreateModal(true);
+  };
+
+  const handleUpdateEvent = async () => {
+    if (!editingEvent) return;
+
+    setCreating(true);
+    setError('');
+
+    try {
+      const response = await organizerApi.updateEvent(editingEvent.id, {
+        title: formData.title,
+        description: formData.description,
+        venue: formData.venue,
+        address: formData.address,
+        city: formData.city,
+        date: new Date(formData.date).toISOString(),
+        endDate: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
+        category: formData.category as any,
+        imageUrl: formData.imageUrl || undefined,
+      });
+
+      if (response.data) {
+        setShowCreateModal(false);
+        setEditingEvent(null);
+        resetForm();
+        loadEvents();
+      } else {
+        setError(response.error || 'Failed to update event');
+      }
+    } catch {
+      setError('Failed to update event');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      description: '',
+      venue: '',
+      address: '',
+      city: 'Addis Ababa',
+      date: '',
+      endDate: '',
+      category: 'MUSIC',
+      imageUrl: '',
+      ticketTypes: [{ name: 'General Admission', price: 0, quantity: 100 }],
+    });
+  };
+
+  const handleCloseModal = () => {
+    setShowCreateModal(false);
+    setEditingEvent(null);
+    resetForm();
+    setError('');
   };
 
   const handleSubmitForApproval = async (eventId: string) => {
@@ -365,7 +431,7 @@ export function OrganizerEvents() {
                             Submit for Approval
                           </DashboardButton>
                           <DashboardButton
-                            onClick={() => navigate(`/organizer/events/${event.id}/edit`)}
+                            onClick={() => handleEditEvent(event)}
                             variant="secondary"
                             size="sm"
                           >
@@ -415,6 +481,18 @@ export function OrganizerEvents() {
                           </DashboardButton>
                         </>
                       )}
+                      {event.status !== 'DRAFT' && (
+                        <DashboardButton
+                          onClick={() => handleEditEvent(event)}
+                          variant="ghost"
+                          size="sm"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </DashboardButton>
+                      )}
                       <DashboardButton
                         onClick={() => handleCloneEvent(event.id)}
                         variant="ghost"
@@ -442,14 +520,16 @@ export function OrganizerEvents() {
         )}
       </div>
 
-      {/* Create Event Modal */}
+      {/* Create/Edit Event Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/50 overflow-y-auto">
           <div className="bg-gray-800 rounded-xl border border-gray-700 w-full max-w-2xl my-8">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
-              <h3 className="text-xl font-semibold text-white">Create New Event</h3>
+              <h3 className="text-xl font-semibold text-white">
+                {editingEvent ? 'Edit Event' : 'Create New Event'}
+              </h3>
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={handleCloseModal}
                 className="p-2 text-gray-400 hover:text-white"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -550,15 +630,37 @@ export function OrganizerEvents() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Image URL (Optional)
+                  Event Image
                 </label>
+                {formData.imageUrl && (
+                  <div className="relative mb-3 rounded-lg overflow-hidden">
+                    <img
+                      src={formData.imageUrl}
+                      alt="Event preview"
+                      className="w-full h-40 object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, imageUrl: '' })}
+                      className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
                 <input
                   type="url"
                   value={formData.imageUrl}
                   onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
                   className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-                  placeholder="https://example.com/image.jpg"
+                  placeholder="Paste image URL (e.g. from Imgur, Cloudinary, or Google Drive)"
                 />
+                <p className="text-gray-500 text-xs mt-1">
+                  Upload your image to <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">Imgur</a> or <a href="https://cloudinary.com" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">Cloudinary</a> and paste the URL here
+                </p>
               </div>
 
               {/* Ticket Types */}
@@ -620,17 +722,19 @@ export function OrganizerEvents() {
 
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-700">
               <DashboardButton
-                onClick={() => setShowCreateModal(false)}
+                onClick={handleCloseModal}
                 variant="secondary"
               >
                 Cancel
               </DashboardButton>
               <DashboardButton
-                onClick={handleCreateEvent}
+                onClick={editingEvent ? handleUpdateEvent : handleCreateEvent}
                 variant="primary"
                 disabled={creating}
               >
-                {creating ? 'Creating...' : 'Create Event'}
+                {creating
+                  ? (editingEvent ? 'Updating...' : 'Creating...')
+                  : (editingEvent ? 'Update Event' : 'Create Event')}
               </DashboardButton>
             </div>
           </div>

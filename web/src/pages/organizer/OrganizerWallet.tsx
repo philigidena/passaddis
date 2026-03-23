@@ -79,6 +79,11 @@ export function OrganizerWallet() {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'transactions' | 'settlements'>('transactions');
+  const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutMethod, setPayoutMethod] = useState('BANK_TRANSFER');
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutResult, setPayoutResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (!authLoading && currentUser?.role !== 'ORGANIZER' && currentUser?.role !== 'ADMIN') {
@@ -184,6 +189,23 @@ export function OrganizerWallet() {
     });
   };
 
+  const handleRequestPayout = async () => {
+    if (!payoutAmount || parseFloat(payoutAmount) <= 0) return;
+    setPayoutLoading(true);
+    setPayoutResult(null);
+
+    const result = await organizerApi.requestPayout(parseFloat(payoutAmount), payoutMethod);
+
+    if (result.data) {
+      setPayoutResult({ success: true, message: result.data.message });
+      setPayoutAmount('');
+      loadWalletData();
+    } else {
+      setPayoutResult({ success: false, message: result.error || 'Payout request failed' });
+    }
+    setPayoutLoading(false);
+  };
+
   const handleExportTransactions = async () => {
     try {
       const response = await organizerApi.exportWalletTransactions();
@@ -219,11 +241,11 @@ export function OrganizerWallet() {
           <h1 className="text-2xl lg:text-3xl font-bold text-white">Wallet & Settlements</h1>
           <p className="text-gray-400 mt-1">Manage your earnings and withdrawals</p>
         </div>
-        <DashboardButton variant="primary" disabled>
+        <DashboardButton variant="primary" onClick={() => setShowPayoutModal(true)}>
           <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
-          Withdraw (Coming Soon)
+          Request Payout
         </DashboardButton>
       </div>
 
@@ -402,6 +424,91 @@ export function OrganizerWallet() {
               </div>
             ))
           )}
+        </div>
+      )}
+      {/* Payout Request Modal */}
+      {showPayoutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-gray-800 rounded-xl border border-gray-700 w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+              <h3 className="text-xl font-semibold text-white">Request Payout</h3>
+              <button
+                onClick={() => { setShowPayoutModal(false); setPayoutResult(null); }}
+                className="p-2 text-gray-400 hover:text-white"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {balance && (
+                <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <p className="text-gray-400 text-sm">Available Balance</p>
+                  <p className="text-2xl font-bold text-green-400">{balance.available.toLocaleString()} ETB</p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Amount (ETB)</label>
+                <input
+                  type="number"
+                  value={payoutAmount}
+                  onChange={(e) => setPayoutAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  min="100"
+                  max={balance?.available || 0}
+                  className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                />
+                <p className="text-gray-500 text-xs mt-1">Minimum: 100 ETB</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Payout Method</label>
+                <select
+                  value={payoutMethod}
+                  onChange={(e) => setPayoutMethod(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                >
+                  <option value="BANK_TRANSFER">Bank Transfer</option>
+                  <option value="TELEBIRR">Telebirr</option>
+                  <option value="CBE_BIRR">CBE Birr</option>
+                </select>
+              </div>
+
+              {payoutResult && (
+                <div className={`p-3 rounded-lg text-sm ${
+                  payoutResult.success
+                    ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+                    : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                }`}>
+                  {payoutResult.message}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <DashboardButton
+                  onClick={() => { setShowPayoutModal(false); setPayoutResult(null); }}
+                  variant="secondary"
+                  className="flex-1"
+                >
+                  Cancel
+                </DashboardButton>
+                <DashboardButton
+                  onClick={handleRequestPayout}
+                  variant="primary"
+                  className="flex-1"
+                  disabled={payoutLoading || !payoutAmount || parseFloat(payoutAmount) < 100}
+                >
+                  {payoutLoading ? 'Submitting...' : 'Request Payout'}
+                </DashboardButton>
+              </div>
+
+              <p className="text-gray-500 text-xs text-center">
+                Payouts are processed within 1-3 business days
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </DashboardLayout>

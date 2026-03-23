@@ -4,7 +4,7 @@ export interface User {
   phone: string;
   name: string | null;
   email: string | null;
-  role: 'USER' | 'ORGANIZER' | 'SHOP_OWNER' | 'ADMIN';
+  role: 'USER' | 'ORGANIZER' | 'PROMOTER' | 'SHOP_OWNER' | 'ADMIN';
   isVerified?: boolean;
   createdAt?: string;
 }

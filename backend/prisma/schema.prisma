@@ -49,6 +49,7 @@ model User {
   eventRatings  EventRating[]
   donations     Donation[]
   loyaltyAccount LoyaltyAccount?
+  promoterProfile Promoter?
 
   @@map("users")
 }
@@ -56,6 +57,7 @@ model User {
 enum UserRole {
   USER
   ORGANIZER
+  PROMOTER
   SHOP_OWNER
   ADMIN
 }
@@ -508,6 +510,7 @@ model Event {
   donations     Donation[]
   resaleListings TicketResale[]
   presaleCodes  PresaleCode[]
+  promoters     EventPromoter[]
 
   @@index([merchantId])
   @@index([organizerId])
@@ -1251,4 +1254,69 @@ model EventBranding {
   organizerId     String
 
   @@map("event_brandings")
+}
+
+// ============== PROMOTERS ==============
+
+model Promoter {
+  id              String   @id @default(uuid())
+  stageName       String            // "DJ Abel", "Teddy Afro"
+  bio             String?
+  photo           String?
+  category        PromoterCategory
+  phone           String?
+  email           String?
+  socialLinks     Json?             // { instagram: "...", tiktok: "...", youtube: "..." }
+  isAvailable     Boolean  @default(true)
+  rating          Float    @default(0)
+  totalEvents     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User?    @relation(fields: [userId], references: [id])
+  userId          String?  @unique
+
+  assignments     EventPromoter[]
+
+  @@index([category])
+  @@index([isAvailable])
+  @@map("promoters")
+}
+
+model EventPromoter {
+  id          String              @id @default(uuid())
+  role        String              @default("PERFORMER") // PERFORMER, DJ, MC, SPEAKER, HOST
+  fee         Float?              // Agreed fee for the event
+  status      PromoterAssignmentStatus @default(PENDING)
+  notes       String?
+  confirmedAt DateTime?
+  createdAt   DateTime            @default(now())
+
+  promoter    Promoter            @relation(fields: [promoterId], references: [id])
+  promoterId  String
+  event       Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId     String
+
+  @@unique([promoterId, eventId])
+  @@index([eventId])
+  @@index([promoterId])
+  @@map("event_promoters")
+}
+
+enum PromoterCategory {
+  MUSICIAN
+  DJ
+  COMEDIAN
+  SPEAKER
+  MC
+  DANCER
+  BAND
+  OTHER
+}
+
+enum PromoterAssignmentStatus {
+  PENDING     // Invited, not yet confirmed
+  CONFIRMED   // Accepted the event
+  DECLINED    // Rejected the invitation
+  CANCELLED   // Was confirmed but cancelled
 }

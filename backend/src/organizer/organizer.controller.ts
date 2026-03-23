@@ -89,6 +89,16 @@ export class OrganizerController {
     return this.organizerService.getSettlements(userId);
   }
 
+  @Post('wallet/payout')
+  @UseGuards(RolesGuard)
+  @Roles('ORGANIZER', 'ADMIN')
+  async requestPayout(
+    @CurrentUser('id') userId: string,
+    @Body() body: { amount: number; method?: string },
+  ) {
+    return this.organizerService.requestPayout(userId, body.amount, body.method);
+  }
+
   // ==================== EVENTS ====================
 
   @Get('events')

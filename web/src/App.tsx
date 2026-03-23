@@ -41,6 +41,8 @@ import { TermsPage } from '@/pages/Terms';
 import { PrivacyPage } from '@/pages/Privacy';
 import { RefundPage } from '@/pages/Refund';
 import { WalletPage } from '@/pages/Wallet';
+import { PaymentConfirmationPage } from '@/pages/PaymentConfirmation';
+import { OrganizerProfilePage } from '@/pages/OrganizerProfile';
 import type { ReactNode } from 'react';
 
 const queryClient = new QueryClient({
@@ -94,6 +96,19 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/resend-verification" element={<ResendVerification />} />
+
+      {/* Payment Confirmation */}
+      <Route
+        path="/payment/confirmation"
+        element={
+          <ProtectedRoute>
+            <PaymentConfirmationPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Organizer Public Profile */}
+      <Route path="/organizers/:id" element={<OrganizerProfilePage />} />
 
       {/* Protected User Routes */}
       <Route
@@ -338,12 +353,28 @@ function App() {
 
 function NotFound() {
   return (
-    <div className="min-h-screen bg-dark-bg flex flex-col items-center justify-center">
-      <h1 className="text-6xl font-bold text-white mb-4">404</h1>
-      <p className="text-white/60 mb-6">Page not found</p>
-      <a href="/" className="text-primary hover:underline">
-        Go back home
-      </a>
+    <div className="min-h-screen bg-dark-bg flex flex-col items-center justify-center px-4">
+      <div className="text-center max-w-md">
+        <p className="text-8xl font-black text-white/5 mb-4">404</p>
+        <h1 className="text-3xl font-bold text-white mb-3 -mt-16">Page Not Found</h1>
+        <p className="text-white/50 mb-8">
+          The page you're looking for doesn't exist or has been moved.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <a
+            href="/"
+            className="px-6 py-3 bg-primary text-white font-semibold rounded-full hover:bg-primary/90 transition-all text-center"
+          >
+            Go Home
+          </a>
+          <a
+            href="/events"
+            className="px-6 py-3 bg-white/5 border border-white/10 text-white font-semibold rounded-full hover:bg-white/10 transition-all text-center"
+          >
+            Browse Events
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

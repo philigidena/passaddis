@@ -17,13 +17,14 @@ import {
   Loader2,
   Zap,
   Timer,
+  ArrowRight,
 } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/Button';
 import { useEvent } from '@/hooks/useEvents';
 import { useAuth } from '@/context/AuthContext';
 import { useSavedEvents } from '@/hooks/useSavedEvents';
-import { ticketsApi, paymentsApi, waitlistApi, eventsApi } from '@/lib/api';
+import { ticketsApi, paymentsApi, waitlistApi, eventsApi, promoApi } from '@/lib/api';
 import type { TicketType } from '@/types';
 import clsx from 'clsx';
 
@@ -55,6 +56,15 @@ export function EventDetailPage() {
   const [giftRecipientPhone, setGiftRecipientPhone] = useState('');
   const [giftRecipientName, setGiftRecipientName] = useState('');
   const [giftMessage, setGiftMessage] = useState('');
+  const [promoCode, setPromoCode] = useState('');
+  const [promoApplied, setPromoApplied] = useState<{
+    code: string;
+    discountType: 'PERCENTAGE' | 'FIXED';
+    discountValue: number;
+    discountAmount: number;
+  } | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState('');
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const [calendarLinks, setCalendarLinks] = useState<{
     googleCalendarUrl: string;
@@ -117,12 +127,35 @@ export function EventDetailPage() {
 
   const totalTickets = Object.values(ticketSelection).reduce((sum, qty) => sum + qty, 0);
   const totalAmount = event?.ticketTypes.reduce((sum, tt) => {
-    // Use currentPrice if available (from dynamic pricing), otherwise use base price
     const effectivePrice = tt.currentPrice ?? tt.price;
     return sum + effectivePrice * (ticketSelection[tt.id] || 0);
   }, 0) || 0;
-  const serviceFee = Math.round(totalAmount * 0.05);
-  const grandTotal = totalAmount + serviceFee;
+  const promoDiscount = promoApplied?.discountAmount || 0;
+  const subtotalAfterDiscount = Math.max(0, totalAmount - promoDiscount);
+  const serviceFee = Math.round(subtotalAfterDiscount * 0.05);
+  const grandTotal = subtotalAfterDiscount + serviceFee;
+
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    setPromoError('');
+    setPromoApplied(null);
+
+    const result = await promoApi.validate(promoCode.trim(), totalAmount, id);
+
+    if (result.data?.valid) {
+      setPromoApplied({
+        code: result.data.code,
+        discountType: result.data.discountType,
+        discountValue: result.data.discountValue,
+        discountAmount: result.data.discountAmount,
+      });
+      setPromoError('');
+    } else {
+      setPromoError(result.data?.message || result.error || 'Invalid promo code');
+    }
+    setPromoLoading(false);
+  };
 
   const handlePurchase = async () => {
     if (!isAuthenticated) {
@@ -375,7 +408,10 @@ export function EventDetailPage() {
               {/* Organizer */}
               <div className="mt-8 pt-8 border-t border-white/10">
                 <h2 className="text-xl font-semibold text-white mb-4">Organizer</h2>
-                <div className="flex items-center gap-4">
+                <Link
+                  to={`/organizers/${event.organizer.id}`}
+                  className="flex items-center gap-4 group"
+                >
                   {event.organizer.logo ? (
                     <img
                       src={event.organizer.logo}
@@ -387,11 +423,12 @@ export function EventDetailPage() {
                       <Users className="w-6 h-6 text-primary" />
                     </div>
                   )}
-                  <div>
-                    <p className="text-white font-medium">{event.organizer.businessName}</p>
-                    <p className="text-white/40 text-sm">Event Organizer</p>
+                  <div className="flex-1">
+                    <p className="text-white font-medium group-hover:text-primary transition-colors">{event.organizer.businessName}</p>
+                    <p className="text-white/40 text-sm">View profile</p>
                   </div>
-                </div>
+                  <ArrowRight className="w-4 h-4 text-white/30 group-hover:text-primary transition-colors" />
+                </Link>
               </div>
             </div>
           </div>
@@ -420,11 +457,25 @@ export function EventDetailPage() {
 
               {/* Summary */}
               {totalTickets > 0 && (
-                <div className="border-t border-white/10 pt-4 mb-6 space-y-2">
+                <div className="border-t border-white/10 pt-4 mb-4 space-y-2">
                   <div className="flex justify-between text-white/60">
                     <span>Subtotal ({totalTickets} tickets)</span>
                     <span>{totalAmount.toLocaleString()} ETB</span>
                   </div>
+                  {promoApplied && (
+                    <div className="flex justify-between text-green-400">
+                      <span className="flex items-center gap-1">
+                        Promo: {promoApplied.code}
+                        <button
+                          onClick={() => { setPromoApplied(null); setPromoCode(''); }}
+                          className="text-white/30 hover:text-red-400 ml-1"
+                        >
+                          &times;
+                        </button>
+                      </span>
+                      <span>-{promoDiscount.toLocaleString()} ETB</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-white/60">
                     <span>Service Fee (5%)</span>
                     <span>{serviceFee.toLocaleString()} ETB</span>
@@ -433,6 +484,33 @@ export function EventDetailPage() {
                     <span>Total</span>
                     <span className="text-primary">{grandTotal.toLocaleString()} ETB</span>
                   </div>
+                </div>
+              )}
+
+              {/* Promo Code */}
+              {totalTickets > 0 && !promoApplied && (
+                <div className="mb-4">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={promoCode}
+                      onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                      placeholder="Promo code"
+                      className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-primary placeholder-white/30"
+                    />
+                    <Button
+                      onClick={handleApplyPromo}
+                      isLoading={promoLoading}
+                      disabled={!promoCode.trim()}
+                      variant="outline"
+                      className="text-sm"
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                  {promoError && (
+                    <p className="text-red-400 text-xs mt-1">{promoError}</p>
+                  )}
                 </div>
               )}
 

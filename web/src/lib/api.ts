@@ -683,6 +683,16 @@ export const organizerApi = {
 
   exportWalletTransactions: () =>
     api.get('/organizer/wallet/transactions/export', { responseType: 'blob' }),
+
+  requestPayout: (amount: number, method?: string) =>
+    handleResponse<{
+      settlementId: string;
+      settlementRef: string;
+      amount: number;
+      method: string;
+      status: string;
+      message: string;
+    }>(api.post('/organizer/wallet/payout', { amount, method })),
 };
 
 // ============== USER WALLET API ==============
@@ -922,6 +932,48 @@ export const shopOwnerApi = {
     ),
 
   getLowStockItems: () => handleResponse<ShopItem[]>(api.get('/shop-owner/items/low-stock')),
+};
+
+// ============== FOLLOWS API ==============
+export const followsApi = {
+  follow: (organizerId: string) =>
+    handleResponse<{ followed: boolean; message: string }>(api.post(`/follows/${organizerId}`)),
+
+  unfollow: (organizerId: string) =>
+    handleResponse<{ followed: boolean; message: string }>(api.delete(`/follows/${organizerId}`)),
+
+  isFollowing: (organizerId: string) =>
+    handleResponse<{ following: boolean }>(api.get(`/follows/${organizerId}/check`)),
+
+  getFollowing: () =>
+    handleResponse<Array<{
+      id: string;
+      businessName: string;
+      logo: string | null;
+      description: string | null;
+      followedAt: string;
+      _count: { events: number; followers: number };
+    }>>(api.get('/follows/my')),
+
+  getFollowerCount: (organizerId: string) =>
+    handleResponse<{ organizerId: string; followerCount: number }>(api.get(`/follows/${organizerId}/count`)),
+
+  getPublicProfile: (organizerId: string) =>
+    handleResponse<any>(api.get(`/follows/${organizerId}/profile`)),
+};
+
+// ============== PROMO API ==============
+export const promoApi = {
+  validate: (code: string, subtotal: number, eventId?: string) =>
+    handleResponse<{
+      valid: boolean;
+      code: string;
+      discountType: 'PERCENTAGE' | 'FIXED';
+      discountValue: number;
+      discountAmount: number;
+      finalAmount: number;
+      message?: string;
+    }>(api.post('/promo/validate', { code, subtotal, eventId })),
 };
 
 export default api;

@@ -70,6 +70,8 @@ export function Navbar() {
         return { path: '/admin', label: 'Admin', icon: LayoutDashboard };
       case 'ORGANIZER':
         return { path: '/organizer', label: 'Dashboard', icon: Building2 };
+      case 'PROMOTER':
+        return { path: '/promoter', label: 'Dashboard', icon: Building2 };
       case 'SHOP_OWNER':
         return { path: '/shop-owner', label: 'Dashboard', icon: Store };
       default:

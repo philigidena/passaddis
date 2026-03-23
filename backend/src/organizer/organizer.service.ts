@@ -388,6 +388,79 @@ export class OrganizerService {
     }));
   }
 
+  /**
+   * Request a payout/settlement
+   */
+  async requestPayout(userId: string, amount: number, method: string = 'BANK_TRANSFER') {
+    const merchant = await this.prisma.merchant.findUnique({ where: { userId } });
+    if (!merchant) throw new NotFoundException('Merchant profile not found');
+
+    // Calculate available balance
+    const balanceResult = await this.prisma.walletTransaction.aggregate({
+      where: { merchantId: merchant.id },
+      _sum: { netAmount: true },
+    });
+    const available = balanceResult._sum.netAmount || 0;
+
+    if (amount > available) {
+      throw new BadRequestException(`Insufficient balance. Available: ${available} ETB`);
+    }
+
+    if (amount < (merchant.minPayout || 100)) {
+      throw new BadRequestException(`Minimum payout amount is ${merchant.minPayout || 100} ETB`);
+    }
+
+    // Check for pending settlements
+    const pendingSettlement = await this.prisma.settlement.findFirst({
+      where: { merchantId: merchant.id, status: 'PENDING' },
+    });
+
+    if (pendingSettlement) {
+      throw new BadRequestException('You already have a pending payout request');
+    }
+
+    // Create settlement request
+    const settlementRef = `STL-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+    const settlement = await this.prisma.settlement.create({
+      data: {
+        settlementRef,
+        merchantId: merchant.id,
+        amount,
+        fee: 0,
+        netAmount: amount,
+        status: 'PENDING',
+        method: method as any,
+      },
+    });
+
+    // Create wallet debit transaction
+    const currentBalance = available;
+    await this.prisma.walletTransaction.create({
+      data: {
+        merchantId: merchant.id,
+        type: 'DEBIT',
+        amount: -amount,
+        fee: 0,
+        netAmount: -amount,
+        balanceBefore: currentBalance,
+        balanceAfter: currentBalance - amount,
+        description: `Payout request: ${settlementRef}`,
+        reference: settlement.id,
+        status: 'PENDING',
+      },
+    });
+
+    return {
+      settlementId: settlement.id,
+      settlementRef,
+      amount,
+      method,
+      status: 'PENDING',
+      message: 'Payout request submitted. Processing time: 1-3 business days.',
+    };
+  }
+
   // ==================== EVENT MANAGEMENT ====================
 
   async getMyEvents(userId: string) {

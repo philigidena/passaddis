@@ -224,11 +224,11 @@ export class PaymentsService {
     });
     this.logger.log(`[INITIATE] Payment record upserted: id=${payment.id} status=PENDING amount=${payment.amount} method=${method}`);
 
-    // Return URL based on order type (ticket vs shop)
+    // Return URL — redirect to payment confirmation page
     const isTicketOrder = order.tickets.length > 0 || (order as any).ticketMetadata;
     const returnUrl = isTicketOrder
-      ? `${this.frontendUrl}/tickets?payment_status=success&order_id=${order.id}`
-      : `${this.frontendUrl}/shop/orders/${order.id}?payment_status=success`;
+      ? `${this.frontendUrl}/payment/confirmation?payment_status=success&order_id=${order.id}`
+      : `${this.frontendUrl}/payment/confirmation?payment_status=success&order_id=${order.id}&shop=true`;
 
     // ─── STRIPE FLOW ───
     if (method === PaymentMethod.STRIPE) {
